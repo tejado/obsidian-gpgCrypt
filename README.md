@@ -3,7 +3,7 @@
 gpgCrypt is an Obsidian plugin to encrypt your notes effortlessly and seamlessly using GnuPG. All Obsidian functions can be used as usual, without reduced Markdown experience.  
 It integrates OpenPGP.js or your local GnuPG installation. For those seeking more advanced security measures, integration with the local GnuPG installation enables the use of OpenPGP smartcards (e.g. with YubiKey or Nitrokey).
 
-[gpgCrypt](https://github.com/tejado/obsidian-gpg-crypt) is developed by [github.com/tejado](https://github.com/tejado).
+[gpgCrypt](https://github.com/tejado/obsidian-gpgCrypt) is developed by [github.com/tejado](https://github.com/tejado).
 
 **Note:** The Obsidian plugin is still in beta! Use it at your own risk!  
 **Warning:** Encrypted notes might be stored unencrypted on disk due to Obsidian's caching mechanisms, coredumps, or other reasons.
@@ -59,7 +59,7 @@ gpg --decrypt --output - path/to/vault/note.md
 - `npm i` or `yarn` to install dependencies.
 - `npm run dev` to start compilation in watch mode.
 - Copy over `main.js` and `manifest.json` to your vault `VaultFolder/.obsidian/plugins/gpgCrypt/`.
-- Alternative: `npm run dev VaultFolder/.obsidian7plugins/gpgCrypt/` to start compilation in watch mode directly into your vault.
+- Alternative: `npm run dev VaultFolder/.obsidian/plugins/gpgCrypt/` to start compilation in watch mode directly into your vault.
 
 ## Credits
 
