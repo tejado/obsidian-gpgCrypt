@@ -1,0 +1,28 @@
+{
+	"name": "obsidian-gpgCrypt",
+	"version": "0.1.0",
+	"description": "Seamlessly encrypts your notes using GPG. Supports smartcards for enhanced security! Keep your information safe and accessible only to you.",
+	"main": "main.js",
+	"scripts": {
+		"dev": "node esbuild.config.mjs development",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"version": "node version-bump.mjs && git add manifest.json versions.json"
+	},
+	"keywords": [],
+	"author": "Tjado Mäcke",
+	"homepage": "https://github.com/tejado/obsidian-gpgCrypt",
+	"license": "MIT",
+	"devDependencies": {
+		"@openpgp/web-stream-tools": "^0.0.14",
+		"@types/node": "^20.6.0",
+		"@typescript-eslint/eslint-plugin": "6.6.0",
+		"@typescript-eslint/parser": "6.6.0",
+		"builtin-modules": "3.3.0",
+		"esbuild": "0.19.2",
+		"esbuild-copy-static-files": "^0.1.0",
+		"obsidian": "latest",
+		"openpgp": "^5.10.1",
+		"tslib": "2.6.2",
+		"typescript": "5.2.2"
+	}
+}

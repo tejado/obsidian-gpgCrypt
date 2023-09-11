@@ -1,0 +1,10 @@
+{
+	"id": "gpgCrypt",
+	"name": "gpgCrypt",
+	"version": "0.1.0",
+	"minAppVersion": "1.4.5",
+	"description": "Encrypts & decrypts your Notes seamlessly with a key pair using GPG. Supports smartcards for enhanced security! Keep your information safe and accessible only to you.",
+	"author": "Tjado Mäcke",
+	"authorUrl": "https://github.com/tejado",
+	"isDesktopOnly": true
+}
