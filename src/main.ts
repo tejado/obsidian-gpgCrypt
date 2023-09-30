@@ -68,8 +68,8 @@ export default class GpgPlugin extends Plugin {
 
 		// file status (if file is encrypted) will be shown in the status bar
 		this.statusBarFileState = this.addStatusBarItem();
-		this.app.workspace.on("file-open", (file) => this.statusBarRefresh(file));
-		this.app.vault.on("modify", (file) => this.statusBarRefresh(file as TFile));
+		this.registerEvent(this.app.workspace.on("file-open", (file) => this.statusBarRefresh(file)));
+		this.registerEvent(this.app.vault.on("modify", (file) => this.statusBarRefresh(file as TFile)));
 
 		// save the original Obsidiane functions to call them 
 		// and in case of plugin unload, we restore them
@@ -117,7 +117,7 @@ export default class GpgPlugin extends Plugin {
 
 				if (isEncrypted === false || isUnknownFile) {
 					menu.addItem((item) => {
-						item.setTitle("Encrypt with Key Pair")
+						item.setTitle("Encrypt with key pair")
 							.setIcon("lock")
 							.onClick(async () => {
 								this.persistentFileEncrypt(tFile);
@@ -127,7 +127,7 @@ export default class GpgPlugin extends Plugin {
 
 				if (isEncrypted === true || isUnknownFile) {
 					menu.addItem((item) => {
-						item.setTitle("Decrypt Permanently")
+						item.setTitle("Decrypt permanently")
 							.setIcon("unlock")
 							.onClick(async () => {
 								this.persistentFileDecrypt(tFile);
