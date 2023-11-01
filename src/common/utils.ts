@@ -21,3 +21,11 @@ export function _log(...args: any[]) {
 		}
 	}
 }
+
+export function changeFileExtMdToGpg(filename: string): string {
+	return filename.replace(/\.md$/, ".gpg");
+}
+
+export function changeFileExtGpgToMd(filename: string): string {
+	return filename.replace(/\.gpg$/, ".md");
+}

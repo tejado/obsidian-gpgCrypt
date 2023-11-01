@@ -15,6 +15,8 @@ export const FileRecoveryDescription: { [key in FileRecovery]: string } = {
 
 export interface Settings {
 	firstLoad: boolean, 
+	encryptAll: boolean,
+	renameToGpg: boolean,
 	fileRecovery: string,
 	backend: string;
 

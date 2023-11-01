@@ -38,6 +38,30 @@ export class SettingsTab extends PluginSettingTab {
 		let privateKeyInputField: TextComponent;
 
 		new Setting(this.containerEl)
+			.setName("Encrypt all notes")
+			.setDesc("When enabled, each note will be encrypted upon its next modification.")
+			.addToggle(toggle => {
+				toggle.setTooltip("When enabled, each note will be encrypted upon its next modification.")
+					.setValue(this.settings.encryptAll)
+					.onChange(async (value) => {
+						this.settings.encryptAll = value;
+						await this.plugin.saveSettings();
+					});
+			});
+
+		new Setting(this.containerEl)
+			.setName("Use .gpg file extension")
+			.setDesc("When enabled, encrypted notes will be renamed with a .gpg file extension. Permanent decryption will rename files to .md extension.")
+			.addToggle(toggle => {
+				toggle.setTooltip("When enabled, encrypted notes will be renamed with a .gpg file extension. Permanent decryption will rename files to .md extension.")
+					.setValue(this.settings.renameToGpg)
+					.onChange(async (value) => {
+						this.settings.renameToGpg = value;
+						await this.plugin.saveSettings();
+					});
+			});
+
+		new Setting(this.containerEl)
 			.setName("File recovery format for encrypted notes")
 			.setDesc("The Obsidian Core Plugin 'File Recovery' stores notes on disk. Choose the storage format.")
 			.addDropdown(dropdown => {
@@ -159,7 +183,7 @@ export class SettingsTab extends PluginSettingTab {
 
 		this.compressionSetting  = new Setting(this.containerEl)
 			.setName("Use compression")
-			.setDesc("If disabled then \"--compression-algo none\" is set.")
+			.setDesc("When disabled then \"--compression-algo none\" is set.")
 			.addToggle(toggle => {
 				toggle.setTooltip("If disabled then \"--compression-algo none\" is set.")
 					.setValue(this.settings.backendWrapper.compression)

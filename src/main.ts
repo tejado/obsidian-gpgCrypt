@@ -6,7 +6,7 @@ import { Backend } from "./backend/Backend";
 import { BackendNative } from "./backend/native/BackendNative";
 import { BackendWrapper } from "./backend/wrapper/BackendWrapper"
 import { BackendPassphraseCache } from "./backend/BackendPassphraseCache";
-import { _log, isGpgKey } from "./common/utils";
+import { _log, changeFileExtGpgToMd, changeFileExtMdToGpg, isGpgKey } from "./common/utils";
 import DialogModal from "./modals/DialogModal";
 import PassphraseModal from "./modals/PassphraseModal";
 import GenerateKeypairModal from "./modals/GenerateKeypairModal";
@@ -103,12 +103,14 @@ export default class GpgPlugin extends Plugin {
 		//@ts-ignore
 		this.app.internalPlugins.plugins["file-recovery"].instance.forceAdd = this.hookedFileRecoveryForceAddRef;
 
+		// register gpg files as markdown
+		this.registerExtensions(["gpg"], "markdown");
 
 		// file menu
 		this.registerEvent(
 			this.app.workspace.on("file-menu", async (menu, file) => {
 				const tFile = (file as TFile);
-				if (tFile.extension !== "md") {
+				if (tFile.extension !== "md" && tFile.extension !== "gpg") {
 					return;
 				}
 
@@ -216,8 +218,7 @@ export default class GpgPlugin extends Plugin {
 
 		try {
 			if (content != null && isEncrypted) {
-				data = await this.encrypt(data);
-				this.encryptedFileStatus.set(normalizedPath, true);
+				[normalizedPath, data] = await this.renameAndEncrypt(normalizedPath, data);
 			} else if (this.encryptedFileStatus.has(normalizedPath) && this.encryptedFileStatus.get(normalizedPath) === true) {
 				const confirmChange = await new DialogModal(this.app).openAndAwait(
 					`WARNING: The file "${normalizedPath}" appears to have been modified outside of Obsidian and is no longer encrypted.`,
@@ -225,11 +226,13 @@ export default class GpgPlugin extends Plugin {
 				);
 
 				if (confirmChange) {
-					data = await this.encrypt(data);
+					[normalizedPath, data] = await this.renameAndEncrypt(normalizedPath, data);
 				} else {
 					this.encryptedFileStatus.set(normalizedPath, false);
 					new Notice(`File "${normalizedPath}" will be saved in plaintext (unencrypted).`, NOTICE_DURATION_MS)
 				}
+			} else if (this.settings.encryptAll === true) {
+				[normalizedPath, data] = await this.renameAndEncrypt(normalizedPath, data);
 			}
 		} catch (error) {
 			_log("An error occurred while reading and encrypting the file: ", error);
@@ -276,7 +279,7 @@ export default class GpgPlugin extends Plugin {
 		//@ts-ignore
 		const fileMarker = file._gpgCryptEncryptCache;
 		if (fileMarker !== undefined && fileMarker !== null) {
-			console.log("Encrypt file cache for file recovery", Date.now() - fileMarker);
+			_log("Encrypt file cache for file recovery. File marker time gap: ", Date.now() - fileMarker);
 
 			// don't encrypt the content if its already encrypted
 			if (await this.gpgNative.isEncrypted(content) === false) {
@@ -356,6 +359,33 @@ export default class GpgPlugin extends Plugin {
 	async originalFileRecoveryForceAdd(normalizedPath: string, data: string) {
 		//@ts-ignore
 		return this.originalFileRecoveryForceAddFunction.call(this.app.internalPlugins.plugins["file-recovery"].instance, normalizedPath, data);
+	}
+
+	async renameAndEncrypt(normalizedPath: string, data: string) {
+		let tFile = this.app.vault.getAbstractFileByPath(normalizePath(normalizedPath)) as TFile;
+
+		if (tFile === null) {
+			_log(`renameAndEncrypt: TFile is null (${normalizedPath})`)
+			return [normalizedPath, data];
+		}
+
+		if (this.settings.renameToGpg === true && tFile.extension === "md") {
+			_log(`rename to gpg: ${normalizedPath}`)
+			let newPath = changeFileExtMdToGpg(normalizedPath);
+			try {
+				await this.app.fileManager.renameFile(tFile, newPath);
+				normalizedPath = newPath;
+			} catch (error) {
+				let msg = `Rename to gpg file extension failed: ${error}`
+				_log(msg);
+				new Notice(msg, NOTICE_DURATION_MS);
+			}	
+		}
+
+		data = await this.encrypt(data);
+		this.encryptedFileStatus.set(normalizedPath, true);
+
+		return [normalizedPath, data];
 	}
 
 	async encrypt(plaintext: string): Promise<string> {
@@ -449,6 +479,18 @@ export default class GpgPlugin extends Plugin {
 			} else if (this.encryptedFileStatus.get(file.path) === true) {
 				throw Error("Note is already encrypted!");
 			}
+
+			if (this.settings.renameToGpg === true && file.extension === "md") {
+				_log(`rename to gpg: ${file.path}`)
+				let newPath = changeFileExtMdToGpg(file.path);
+				try {
+					await this.app.fileManager.renameFile(file, newPath);
+					// refresh file as the file extension changed
+					file = this.app.vault.getAbstractFileByPath(normalizePath(newPath)) as TFile;
+				} catch (error) {
+					throw Error(`Encryption failed as note could not be renamed to gpg file extension: ${error}`);
+				}	
+			}
 			
 			const contentEncrypted = await this.encrypt(content);
 			await this.originalWrite(file.path, contentEncrypted);
@@ -473,6 +515,18 @@ export default class GpgPlugin extends Plugin {
 				throw Error("Unknown note state: gpgCrypt read function was not executed!");
 			} else if (this.encryptedFileStatus.get(file.path) === false) {
 				throw Error("Note is not encrypted!");
+			}
+
+			if (this.settings.renameToGpg === true && file.extension === "gpg") {
+				_log(`rename to md: ${file.path}`)
+				let newPath = changeFileExtGpgToMd(file.path);
+				try {
+					await this.app.fileManager.renameFile(file, newPath);
+					// refresh file as the file extension changed
+					file = this.app.vault.getAbstractFileByPath(normalizePath(newPath)) as TFile;
+				} catch (error) {
+					throw Error(`Decryption failed as note could not be renamed to markdown file extension: ${error}`);
+				}	
 			}
 
 			await this.originalWrite(file.path, content);
@@ -555,6 +609,9 @@ export default class GpgPlugin extends Plugin {
 	async loadSettings() {
 		const DEFAULT_SETTINGS: Settings = {
 			firstLoad: true,
+
+			encryptAll: false,
+			renameToGpg: false,
 
 			fileRecovery: FileRecovery.ENCRYPTED,
 
