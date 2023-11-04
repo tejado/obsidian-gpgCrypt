@@ -15,22 +15,55 @@ It integrates OpenPGP.js or your local GnuPG installation. For those seeking mor
 - OpenPGP smartcard support (e.g. with YubiKey, Nitrokey, ...) over gpg CLI Wrapper
 - Configurable duration of remembering your password
 - Configure how encrypted notes should be handled by the file recovery core plugin.
+- Option to encrypt all notes
 - Enable/disable compression
 - Tested with Obsidian Sync
 - Status bar integration
 
-
 ## Installation
 
-Install it manually or use the Obsidian plugin [Beta Reviewers Auto-update Tester](https://github.com/TfTHacker/obsidian42-brat).
+gpgCrypt is available over Obsidian Plugins: [obsidian.md - gpgCrypt](https://obsidian.md/plugins?search=gpgCrypt).
 
-Once the plugin is published on the Obsidian Plugins website, it will be noted here.
+As an alternative, you can install it manually or use the Obsidian plugin [Beta Reviewers Auto-update Tester](https://github.com/TfTHacker/obsidian42-brat).
 
 ## Usage
 
-Initially, a key pair is required. The first time you load gpgCrypt, a dialog for key pair generation appears automatically. If you wish to use gpg CLI or adjust other settings, navigate to "gpgCrypt" within the Obsidian Settings.
+To encrypt and decrypt your notes, gpgCrypt requires a key pair: 
+- **Public key** for encryption
+- **Private key** for decryption (passphrase-protected private keys are supported).
 
-To encrypt or decrypt notes, right-click the desired note and choose "Encrypt with Key Pair" or "Decrypt Permanently" from the file context menu.
+When you load gpgCrypt for the first time, a welcome dialog opens. **Generate** or use an **existing** key pair to encrypt your notes.  
+To use existing key pair, open gpgCrypt plugin settings and select an encryption backend: **OpenPGP.js** or **GnuPG CLI Wrapper**.
+
+### OpenPGP.js
+
+1. Place your key pair in your Obsidian Vault. The keys should be in ASCII format with a .asc extension. For example, public.asc and private.asc.
+2. Open gpgCrypt plugin settings in Obsidian.
+3. Under `Public key` and `Private key`, set the paths to your key files relative to your Obsidian Vault
+
+### GnuPG CLI Wrapper
+
+1. Open gpgCrypt plugin settings in Obsidian
+2. Set encryption backend to `GnuPG CLI Wrapper`
+3. Make sure the `GPG executable` path is set correctly.
+4. Select the GPG key you wish to use to encrypt your notes.
+
+### How to encrypt your notes
+
+Encryption must be performed individually for each note. Navigate to the note's context menu and choose `Encrypt with key pair`.  
+To ensure all your notes are encrypted, turn on the `Encrypt all notes` feature in the settings of the gpgCrypt plugin. Each note will be encrypted upon its next modification.
+
+## FAQ 
+
+### Error "Unusable public key"
+The error ***There is no assurance this key belongs to the named user. Unusable public key*** happens in `GnuPG CLI Wrapper` mode when you imported the key and did not any specific trust for the key. In this case, gpg can't use the key.
+Two solutions:
+- Set a specific trust for your key pair over gpg, e.g. using the gpg CLI
+- or enable `Always trust keys` in the gpgCrypt plugin settings.
+
+More information:
+- https://en.wikipedia.org/wiki/Web_of_trust
+- https://security.stackexchange.com/questions/41208/what-is-the-exact-meaning-of-this-gpg-output-regarding-trust
 
 ### Encrypt & decrypt outside of Obsidian
 
