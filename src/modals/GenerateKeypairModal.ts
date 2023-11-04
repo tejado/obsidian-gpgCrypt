@@ -45,7 +45,7 @@ export default class GenerateKeypairModal extends Modal {
 		const emailInput = createSetting("E-mail address", "Identifier that personalizes the new key pair for easier recognition and key management (optional).", "text", "obsidian@example.com");
 		const publicKeyInput = createSetting("Public key name", "File name of the new public key which will be stored in your Obsidian Vault.", "text", "public.asc");
 		const privateKeyInput = createSetting("Private key name", "File name of the new private key which will be stored in your Obsidian Vault.", "text", "private.asc");
-		const passphraseInput = createSetting("Passphrase", "Enter the passphrase to protect the private key.", "password");
+		const passphraseInput = createSetting("Passphrase", "Enter the passphrase to protect the private key (optional).", "password");
 		const { inputEl: confirmPassphraseInput, descDiv: confirmPassphraseDesc } = createSetting("Confirm passphrase", "Confirm the passphrase.", "password");
 
 		// Button container

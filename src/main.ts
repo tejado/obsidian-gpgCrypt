@@ -10,6 +10,7 @@ import { _log, changeFileExtGpgToMd, changeFileExtMdToGpg, isGpgKey } from "./co
 import DialogModal from "./modals/DialogModal";
 import PassphraseModal from "./modals/PassphraseModal";
 import GenerateKeypairModal from "./modals/GenerateKeypairModal";
+import WelcomeModal from "./modals/WelcomeModal";
 
 
 // The duration of Notice alerts in milliseconds
@@ -60,7 +61,23 @@ export default class GpgPlugin extends Plugin {
 		this.addSettingTab(new SettingsTab(this.app, this, this.settings));
 
 		// load the keys when the layout is ready
-		this.app.workspace.onLayoutReady( () => {
+		this.app.workspace.onLayoutReady( async () => {
+			if (this.settings.firstLoad === true) {
+				this.settings.firstLoad = false;
+				this.saveSettings();
+	
+				const action = await new WelcomeModal(this.app, true).openAndAwait();
+	
+				if (action === "gen-key") {
+					this.generateKeypair();
+				} else if (action === "open-settings") {
+					//@ts-ignore
+					this.app.setting.open("gpg-crypt");
+					//@ts-ignore
+					this.app.setting.openTabById("gpg-crypt");
+				}
+			}
+
 			this.loadKeypair();
 			this.layoutReady = true;
 		});
@@ -362,7 +379,7 @@ export default class GpgPlugin extends Plugin {
 	}
 
 	async renameAndEncrypt(normalizedPath: string, data: string) {
-		let tFile = this.app.vault.getAbstractFileByPath(normalizePath(normalizedPath)) as TFile;
+		const tFile = this.app.vault.getAbstractFileByPath(normalizePath(normalizedPath)) as TFile;
 
 		if (tFile === null) {
 			_log(`renameAndEncrypt: TFile is null (${normalizedPath})`)
@@ -371,12 +388,12 @@ export default class GpgPlugin extends Plugin {
 
 		if (this.settings.renameToGpg === true && tFile.extension === "md") {
 			_log(`rename to gpg: ${normalizedPath}`)
-			let newPath = changeFileExtMdToGpg(normalizedPath);
+			const newPath = changeFileExtMdToGpg(normalizedPath);
 			try {
 				await this.app.fileManager.renameFile(tFile, newPath);
 				normalizedPath = newPath;
 			} catch (error) {
-				let msg = `Rename to gpg file extension failed: ${error}`
+				const msg = `Rename to gpg file extension failed: ${error}`
 				_log(msg);
 				new Notice(msg, NOTICE_DURATION_MS);
 			}	
@@ -482,7 +499,7 @@ export default class GpgPlugin extends Plugin {
 
 			if (this.settings.renameToGpg === true && file.extension === "md") {
 				_log(`rename to gpg: ${file.path}`)
-				let newPath = changeFileExtMdToGpg(file.path);
+				const newPath = changeFileExtMdToGpg(file.path);
 				try {
 					await this.app.fileManager.renameFile(file, newPath);
 					// refresh file as the file extension changed
@@ -519,7 +536,7 @@ export default class GpgPlugin extends Plugin {
 
 			if (this.settings.renameToGpg === true && file.extension === "gpg") {
 				_log(`rename to md: ${file.path}`)
-				let newPath = changeFileExtGpgToMd(file.path);
+				const newPath = changeFileExtGpgToMd(file.path);
 				try {
 					await this.app.fileManager.renameFile(file, newPath);
 					// refresh file as the file extension changed
@@ -639,13 +656,6 @@ export default class GpgPlugin extends Plugin {
 	}
 
 	async loadKeypair() {
-		if (this.settings.firstLoad === true) {
-			this.generateKeypair();
-
-			this.settings.firstLoad = false;
-			this.saveSettings();
-		}
-
 		const publicKey = await this.getFileContent(this.settings.backendNative.publicKeyPath);
 		const privateKey = await this.getFileContent(this.settings.backendNative.privateKeyPath);
 

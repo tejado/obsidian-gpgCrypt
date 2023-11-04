@@ -1,11 +1,12 @@
 import { App, Notice, PluginSettingTab, Setting, TextComponent, normalizePath } from "obsidian";
-import { FileRecovery, FileRecoveryDescription, Settings } from "./Settings";
-import GpgPlugin from "../main";
-import DialogModal from "../modals/DialogModal";
 
+import { FileRecovery, FileRecoveryDescription, Settings } from "./Settings";
 import { Backend, BackendDescription } from "src/backend/Backend";
-import { CliPathStatus, GPGStatusMessage } from "../backend/wrapper/BackendWrapper";
+import { CliPathStatus, GPGStatusMessage } from "src/backend/wrapper/BackendWrapper";
 import { BackendPassphraseCache } from "src/backend/BackendPassphraseCache";
+import GpgPlugin from "src/main";
+import DialogModal from "src/modals/DialogModal";
+import WelcomeModal from "src/modals/WelcomeModal";
 
 export class SettingsTab extends PluginSettingTab {
 	app: App;
@@ -118,7 +119,7 @@ export class SettingsTab extends PluginSettingTab {
 			.setName("Public key")
 			.setDesc("Path to your public key file.")
 			.addButton(button => {
-				button.setButtonText("Generate new key pair")
+				button.setButtonText("Generate new key pair...")
 					.onClick(async() =>  {
 						const success = await this.plugin.generateKeypair();
 						
@@ -202,6 +203,43 @@ export class SettingsTab extends PluginSettingTab {
 					.setDisabled(true);
 			});
 
+		// build common settings
+		new Setting(this.containerEl)
+			.setHeading()
+			.setName("About");
+
+		new Setting(this.containerEl)
+			.setName("Show welcome dialog")
+			.setDesc("Open the welcome dialog to understand how to set up your keys.")
+			.addButton(button => {
+				button.setButtonText("Open welcome dialog...")
+					.setCta()
+					.onClick(async() => {
+						const action = await new WelcomeModal(this.app, false).openAndAwait();
+
+						if (action === "gen-key") {
+							const success = await this.plugin.generateKeypair();
+						
+							if (success) {
+								publicKeyInputField.setValue(this.settings.backendNative.publicKeyPath);
+								privateKeyInputField.setValue(this.settings.backendNative.publicKeyPath);
+							}
+						}
+					});
+			});
+
+		const learnMoreSetting = new Setting(this.containerEl)
+			.setName("Learn more")
+			.setDesc("https://github.com/tejado/obsidian-gpgCrypt");
+
+		// Manually add a clickable link to the setting description
+		const descEl = learnMoreSetting.descEl;
+		descEl.empty();
+		const anchor = descEl.createEl("a", {
+			text: "https://github.com/tejado/obsidian-gpgCrypt",
+			href: "https://github.com/tejado/obsidian-gpgCrypt"
+		});
+		anchor.setAttribute("target", "_blank");
 
 		this.refreshBackendSettings();
 	}
@@ -264,12 +302,12 @@ export class SettingsTab extends PluginSettingTab {
 		// Fetching public keys and updating the dropdown
 		const keys = await this.plugin.gpgWrapper.getPublicKeys();
 
-		// Remove initial recipient field
-		this.recipientSetting.settingEl.remove();
+		// Clear recipient field
+		this.recipientSetting.clear();
 
 		if (keys.length === 0) {
 			new Notice("No keys found.");
-			this.recipientSetting = new Setting(this.containerEl)
+			this.recipientSetting
 				.setName(this.SETTING_RECIPIENT_NAME)
 				.setClass("mod-warning")
 				.setDesc(this.SETTING_RECIPIENT_DESC)
@@ -282,7 +320,7 @@ export class SettingsTab extends PluginSettingTab {
 			return;
 		}
 
-		this.recipientSetting = new Setting(this.containerEl)
+		this.recipientSetting
 			.setName(this.SETTING_RECIPIENT_NAME)
 			.setDesc(this.SETTING_RECIPIENT_DESC)
 			.addDropdown(dropdown => {

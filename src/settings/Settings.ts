@@ -1,5 +1,5 @@
-import { BackendNativeSettings } from "../backend/native/BackendNativeSettings";
-import { BackendWrapperSettings } from "../backend/wrapper/BackendWrapperSettings";
+import { BackendNativeSettings } from "src/backend/native/BackendNativeSettings";
+import { BackendWrapperSettings } from "src/backend/wrapper/BackendWrapperSettings";
 
 export enum FileRecovery { 
     PLAINTEXT = "plaintext",
