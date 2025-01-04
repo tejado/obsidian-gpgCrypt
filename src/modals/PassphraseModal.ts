@@ -13,6 +13,7 @@ export default class PassphraseModal extends Modal {
     
 	openAndAwait(additionalDescription?: string){
 		this.additionalDescription = additionalDescription;
+		this.containerEl.style.zIndex = "10001";
 
 		return new Promise<string>((resolve, reject) => {
 			this.resolve = resolve;
