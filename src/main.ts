@@ -452,53 +452,65 @@ export default class GpgPlugin extends Plugin {
 
 			let passphrase: string | null = null;
 
-			if (this.gpgNative.isPrivateKeyEncrypted()) {
-				passphrase = this.cache.getPassphrase();
-				if (!passphrase) {
-					if (this.pendingPassphrasePromises === false) {
-						this.pendingPassphrasePromises = [];
+			let showDialog: boolean = this.pendingPassphrasePromises === false;
 
-						try {
-							passphrase = await new PassphraseModal(this.app).openAndAwait(` for private key "${this.settings.backendNative.privateKeyPath}"`);
+			while (true) {
+				if (this.gpgNative.isPrivateKeyEncrypted()) {
+					passphrase = this.cache.getPassphrase();
+					if (!passphrase) {
+						if (showDialog) {
+							if (this.pendingPassphrasePromises === false) {
+								this.pendingPassphrasePromises = [];
+							}
 
-							// @ts-ignore
-							if (this.pendingPassphrasePromises !== false) {
-								this.pendingPassphrasePromises.forEach(([resolve, reject]) => resolve(passphrase));
+							try {
+								passphrase = await new PassphraseModal(this.app).openAndAwait(` for private key "${this.settings.backendNative.privateKeyPath}"`);
+							} catch {
+								// @ts-ignore
+								if (this.pendingPassphrasePromises !== false) {
+									this.pendingPassphrasePromises.forEach(([resolve, reject]) => reject());
+								}
+								this.pendingPassphrasePromises = false;
 							}
-						} catch {
-							// @ts-ignore
-							if (this.pendingPassphrasePromises !== false) {
-								this.pendingPassphrasePromises.forEach(([resolve, reject]) => reject());
-							}
-						} finally {
-							this.pendingPassphrasePromises = false;
+						} else {
+							passphrase = await new Promise((resolve, reject) => {
+								this.pendingPassphrasePromises = [
+									...(<PendingPromiseCallbacks[]>(this.pendingPassphrasePromises)),
+									[resolve, reject],
+								];
+							});
 						}
-					} else {
-						passphrase = await new Promise((resolve, reject) => {
-							this.pendingPassphrasePromises = [
-								...(<PendingPromiseCallbacks[]>(this.pendingPassphrasePromises)),
-								[resolve, reject],
-							];
-						});
 					}
 				}
-			}
 
-			try {
-				const plainntext = await this.gpgNative.decrypt(encryptedText, passphrase);
+				try {
+					const plainntext = await this.gpgNative.decrypt(encryptedText, passphrase);
 
-				// only cache password when the decryption was successul and a passphrase was used
-				if (passphrase) { 
-					this.cache.setPassphrase(passphrase);
+					// only cache password when the decryption was successul and a passphrase was used
+					if (passphrase) { 
+						this.cache.setPassphrase(passphrase);
+
+						// @ts-ignore
+						if (this.pendingPassphrasePromises !== false) {
+							this.pendingPassphrasePromises.forEach(([resolve, reject]) => resolve(passphrase));
+						}
+					}
+
+					return plainntext;
+				} catch (error) {
+					_log(error);
+					if(!error.message.includes("Incorrect key passphrase")) {
+						// @ts-ignore
+						if (this.pendingPassphrasePromises !== false) {
+							this.pendingPassphrasePromises.forEach(([resolve, reject]) => reject());
+						}
+						this.pendingPassphrasePromises = false;
+
+						throw error;
+					} else {
+						new Notice(error.message);
+					}
 				}
-
-				return plainntext;
-			} catch (error) {
-				_log(error);
-				if(error.message.includes("Incorrect key passphrase")) {
-					new Notice(error.message);
-				}
-				throw error;
 			}
 		} else {
 			const args: string[] = [];
