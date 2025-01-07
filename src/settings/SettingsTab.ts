@@ -14,8 +14,12 @@ export class SettingsTab extends PluginSettingTab {
 	settings: Settings;
 	containerEl: HTMLElement;
 
+	// OpenPGP.js (native) Settings
 	private nativePublicKeySetting: Setting;
 	private nativePrivateKeySetting: Setting;
+	private nativeRememberPassphraseSetting: Setting;
+
+	// Gpg CLI Wrapper (wrapper) Settings
 	private executableSetting: Setting;
 	private trustModelSetting: Setting;
 	private compressionSetting: Setting;
@@ -76,30 +80,14 @@ export class SettingsTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					});
 			});
-        
-		new Setting(this.containerEl)
-			.setName("Remember passphrase")
-			.setDesc("Duration (in seconds) for which Obsidian remembers your passphrase before prompting again. Set to 0 to disable.")
-			.addText(text => {
-				text.setValue(this.settings.passphraseTimeout.toString())
-					.onChange(async (value) => {
-						const valueNumber = Number(value);
-
-						if (BackendPassphraseCache.isValidTimeout(valueNumber)) {
-							this.plugin.cache.setTimeout(valueNumber);
-
-							this.settings.passphraseTimeout = valueNumber;
-							await this.plugin.saveSettings();
-							await this.plugin.loadKeypair();
-						} else {
-							text.setValue(this.settings.passphraseTimeout.toString() || Number(300).toString());
-						}
-					});
-			});
 
 		new Setting(this.containerEl)
-			.setName("Which encryption backend do you prefer?")
-			.setDesc("Native OpenPGP.js or gpg cli wrapper (supports smartcards).")
+			.setHeading()
+			.setName("Encryption Backend");
+
+		new Setting(this.containerEl)
+			.setName("Encryption backend")
+			.setDesc("Native OpenPGP.js or GnuPG CLI Wrapper. The GnuPG CLI Wrapper is intended for advanced users, offering more configuration options and support for smartcards.")
 			.addDropdown(dropdown => {
 				dropdown
 					.addOption(Backend.NATIVE, BackendDescription[Backend.NATIVE])
@@ -156,6 +144,28 @@ export class SettingsTab extends PluginSettingTab {
 					});
 			});
 
+		this.nativeRememberPassphraseSetting = new Setting(this.containerEl)
+			.setName("Remember passphrase")
+			.setDesc("Duration (in seconds) for which Obsidian remembers your private key passphrase before prompting you again. Minimum: 10 seconds. If you close or restart the app, you'll need to enter your passphrase again.")
+			.addText(text => {
+				text.setValue(this.settings.passphraseTimeout.toString())
+					.onChange(async (value) => {
+						let valueNumber = Number(value);
+
+						if (BackendPassphraseCache.isValidTimeout(valueNumber)) {
+							if (valueNumber < 10) {
+								valueNumber = 10;
+							}
+
+							this.plugin.cache.setTimeout(valueNumber);
+
+							this.settings.passphraseTimeout = valueNumber;
+							await this.plugin.saveSettings();
+						} else {
+							text.setValue(this.settings.passphraseTimeout.toString() || Number(300).toString());
+						}
+					});
+			});
         
 
 		// Gpg CLI Wrapper (wrapper) Settings
@@ -248,6 +258,7 @@ export class SettingsTab extends PluginSettingTab {
 		if (this.settings.backend === Backend.WRAPPER) {
 			this.nativePublicKeySetting.settingEl.hide();
 			this.nativePrivateKeySetting.settingEl.hide();
+			this.nativeRememberPassphraseSetting.settingEl.hide();
 			this.executableSetting.settingEl.show();
 			this.trustModelSetting.settingEl.show();
 			this.compressionSetting.settingEl.show();
@@ -258,6 +269,7 @@ export class SettingsTab extends PluginSettingTab {
 		} else {
 			this.nativePublicKeySetting.settingEl.show();
 			this.nativePrivateKeySetting.settingEl.show();
+			this.nativeRememberPassphraseSetting.settingEl.show();
 			this.executableSetting.settingEl.hide();
 			this.trustModelSetting.settingEl.hide();
 			this.compressionSetting.settingEl.hide();
