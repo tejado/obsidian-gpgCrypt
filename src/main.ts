@@ -650,6 +650,11 @@ export default class GpgPlugin extends Plugin {
 		}
 
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+
+		// ensure that the passphraseTimeout is minimum 10s
+		if (this.settings.passphraseTimeout < 10) {
+			this.settings.passphraseTimeout = 10;
+		}
 		this.cache.setTimeout(this.settings.passphraseTimeout);
 
 		this.gpgWrapper.setExecutable(this.settings.backendWrapper.executable);
