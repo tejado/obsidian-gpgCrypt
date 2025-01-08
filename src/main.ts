@@ -32,6 +32,13 @@ export default class GpgPlugin extends Plugin {
 
 	private layoutReady = false;
 
+	// Stores the PassphraseRequest promise to avoid re-prompting in case of a correct
+	// passphrase, when Obsidian is doing multiple async read calls.
+	private passphraseRequestPromise: Promise<string | null> | null = null;
+
+	// Avoid multiple error notices when passphrase requet gets canceled
+	private errorNoticeShown = false;
+
 	private originalAdapterReadFunction: (normalizedPath: string) => Promise<string>;
 	private originalAdapterWriteFunction: (normalizedPath: string, data: string, options?: DataWriteOptions) => Promise<void>
 	private originalAdapterProcessFunction: (normalizedPath: string, fn: (data: string) => string, options?: DataWriteOptions) => Promise<string>;
@@ -437,43 +444,7 @@ export default class GpgPlugin extends Plugin {
 	}
 
 	async decrypt(encryptedText: string): Promise<string> {
-		if (this.settings.backend == Backend.NATIVE) {
-			if(!this.gpgNative.hasPrivateKey() && this.layoutReady == false) {
-				throw new Error("Please open the note again: key pair has not been loaded yet!");
-			} else if (!this.gpgNative.hasPrivateKey()) {
-				throw new Error("No private key for decryption configured!");
-			}
-
-			let passphrase: string | null = null;
-
-			// eslint-disable-next-line no-constant-condition
-			while (true) {
-				if(this.gpgNative.isPrivateKeyEncrypted()) {
-					passphrase = this.cache.getPassphrase();
-					if (!passphrase) {
-						passphrase = await new PassphraseModal(this.app).openAndAwait(` for private key "${this.settings.backendNative.privateKeyPath}"`);
-					}
-				}
-
-				try {
-					const plainntext = await this.gpgNative.decrypt(encryptedText, passphrase);
-
-					// only cache password when the decryption was successul and a passphrase was used
-					if (passphrase) { 
-						this.cache.setPassphrase(passphrase);
-					}
-
-					return plainntext;
-				} catch (error) {
-					_log(error);
-					if(!error.message.includes("Incorrect key passphrase")) {
-						throw error;
-					} else {
-						new Notice(error.message);
-					}
-				}
-			}
-		} else {
+		if (this.settings.backend == Backend.WRAPPER) {
 			const args: string[] = [];
 
 			if(this.settings.backendWrapper.trustModelAlways) {
@@ -482,8 +453,78 @@ export default class GpgPlugin extends Plugin {
 
 			return this.gpgWrapper.decrypt(encryptedText);
 		}
+
+		if(!this.gpgNative.hasPrivateKey() && this.layoutReady == false) {
+			throw new Error("Please open the note again: key pair has not been loaded yet!");
+		} else if (!this.gpgNative.hasPrivateKey()) {
+			throw new Error("No private key for decryption configured!");
+		}
+
+
+		// If key not encrypted, decrypt immediately
+		if (!this.gpgNative.isPrivateKeyEncrypted()) {
+			return this.gpgNative.decrypt(encryptedText, null);
+		}
+
+		// eslint-disable-next-line no-constant-condition
+		while (true) {
+			let passphrase = this.cache.getPassphrase();
+			if (!passphrase) {
+				passphrase = await this.requestPassphraseModal();
+			}
+		
+			try {
+				const plainntext = await this.gpgNative.decrypt(encryptedText, passphrase);
+
+				// only cache password when the decryption was successul and a passphrase was used
+				if (passphrase) { 
+					this.cache.setPassphrase(passphrase);
+				}
+
+				return plainntext;
+			} catch (error) {
+				_log(error);
+
+				if(error.message.includes("Incorrect key passphrase")) {
+					// Avoid a duplicated error notice
+					if (!this.errorNoticeShown) {		
+						this.errorNoticeShown = true;
+						new Notice(error.message);
+					}
+				} else {
+					throw error;
+				}
+			}
+		}
 	}
 
+	private async requestPassphraseModal(): Promise<string | null> {
+		// If we already have a request in flight, share it
+		if (this.passphraseRequestPromise) {
+			return this.passphraseRequestPromise;
+		}
+		
+		this.passphraseRequestPromise = new Promise(async (resolve, reject) => {
+			try {
+				const passphrase = await new PassphraseModal(this.app).openAndAwait(` for private key "${this.settings.backendNative.privateKeyPath}"`);
+
+				// Once we do prompt (i.e., a new passphrase attempt), allow ONE new notice if the passphrase is wrong.
+				// This avoids multiple Notices due to multiple Obsidian read calls
+				this.errorNoticeShown = false;
+
+				resolve(passphrase);
+			} catch (err) {
+				new Notice(err.message);
+				reject(err);
+			} finally {
+				// Reset for the next time we need a passphrase
+				this.passphraseRequestPromise = null;
+			}
+		});
+		
+		return this.passphraseRequestPromise;
+	}
+		  
 	async persistentFileEncrypt(file: TFile) {
 		try {
 
