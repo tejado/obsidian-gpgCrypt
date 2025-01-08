@@ -90,9 +90,12 @@ export class SettingsTab extends PluginSettingTab {
 			new Setting(this.containerEl)
 				.setName("Encryption backend")
 				.setDesc("Only native OpenPGP.js is supported on mobile devices.")
-				.addText(text => {
-					text.setValue(BackendDescription[Backend.NATIVE])
-				})
+				.addDropdown(dropdown => {
+					dropdown
+						.addOption(Backend.NATIVE, BackendDescription[Backend.NATIVE])
+						.setValue(Backend.NATIVE)
+						.setDisabled(true);
+				});
 		} else {
 			new Setting(this.containerEl)
 				.setName("Encryption backend")
