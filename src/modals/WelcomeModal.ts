@@ -1,4 +1,4 @@
-import { App, Modal, ButtonComponent } from "obsidian";
+import { App, Modal, ButtonComponent, Platform } from "obsidian";
 
 export default class WelcomeModal extends Modal {
 
@@ -45,7 +45,11 @@ export default class WelcomeModal extends Modal {
 		appendTxt(instructions, "Go to the gpgCrypt plugin settings in Obsidian.", "li");
 		appendTxt(instructions, "Under 'Public key' and 'Private key', set the paths to your key files relative to your Obsidian Vault.", "li");
 
-		appendTxt(contentEl, "Should you prefer using your local GnuPG CLI installation, for instance to integrate an OpenPGP Smartcard like Yubikey, configure this option in the plugin settings.", "p");
+		if (Platform.isMobile) {
+			appendTxt(contentEl, "Please note that GnuPG CLI Wrapper is not supported on mobile devices.", "p");
+		} else {
+			appendTxt(contentEl, "Should you prefer using your local GnuPG CLI installation, for instance to integrate an OpenPGP Smartcard like Yubikey, configure this option in the plugin settings.", "p");
+		}
 
 		appendTxt(contentEl, "How to encrypt your notes", "h4");
 		appendTxt(contentEl, "Encryption must be performed individually for each note. Navigate to the note's context menu and choose 'Encrypt with key pair'.", "p");
