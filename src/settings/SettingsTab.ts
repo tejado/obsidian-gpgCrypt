@@ -1,4 +1,4 @@
-import { App, Notice, PluginSettingTab, Setting, TextComponent, normalizePath } from "obsidian";
+import { App, Notice, Platform, PluginSettingTab, Setting, TextComponent, normalizePath } from "obsidian";
 
 import { FileRecovery, FileRecoveryDescription, Settings } from "./Settings";
 import { Backend, BackendDescription } from "src/backend/Backend";
@@ -81,25 +81,35 @@ export class SettingsTab extends PluginSettingTab {
 					});
 			});
 
+		
 		new Setting(this.containerEl)
 			.setHeading()
 			.setName("Encryption Backend");
 
-		new Setting(this.containerEl)
-			.setName("Encryption backend")
-			.setDesc("Native OpenPGP.js or GnuPG CLI Wrapper. The GnuPG CLI Wrapper is intended for advanced users, offering more configuration options and support for smartcards.")
-			.addDropdown(dropdown => {
-				dropdown
-					.addOption(Backend.NATIVE, BackendDescription[Backend.NATIVE])
-					.addOption(Backend.WRAPPER, BackendDescription[Backend.WRAPPER])
-					.setValue(this.settings.backend)
-					.onChange(async value => {
-						this.settings.backend = value;
-						await this.plugin.saveSettings();
+		if (Platform.isMobile) {
+			new Setting(this.containerEl)
+				.setName("Encryption backend")
+				.setDesc("Only native OpenPGP.js is supported on mobile devices.")
+				.addText(text => {
+					text.setValue(BackendDescription[Backend.NATIVE])
+				})
+		} else {
+			new Setting(this.containerEl)
+				.setName("Encryption backend")
+				.setDesc("Native OpenPGP.js or GnuPG CLI Wrapper. The GnuPG CLI Wrapper is intended for advanced users, offering more configuration options and support for smartcards.")
+				.addDropdown(dropdown => {
+					dropdown
+						.addOption(Backend.NATIVE, BackendDescription[Backend.NATIVE])
+						.addOption(Backend.WRAPPER, BackendDescription[Backend.WRAPPER])
+						.setValue(this.settings.backend)
+						.onChange(async value => {
+							this.settings.backend = value;
+							await this.plugin.saveSettings();
 
-						this.refreshBackendSettings();
-					});
-			});
+							this.refreshBackendSettings();
+						});
+				});
+		}
 
 
 		// OpenPGP.js (native) Settings

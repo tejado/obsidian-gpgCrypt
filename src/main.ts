@@ -1,4 +1,4 @@
-import { Notice, Plugin, DataWriteOptions, TFile, normalizePath, setIcon } from "obsidian";
+import { Notice, Platform, Plugin, DataWriteOptions, TFile, normalizePath, setIcon } from "obsidian";
 
 import { FileRecovery, Settings } from "./settings/Settings";
 import { SettingsTab } from "./settings/SettingsTab";
@@ -420,6 +420,10 @@ export default class GpgPlugin extends Plugin {
 
 			return this.gpgNative.encrypt(plaintext);
 		} else {
+			if (Platform.isMobile) {
+				throw new Error("GnuPG CLI Wrapper mode is not supported on mobile devices.");
+			}
+
 			const args: string[] = ["--armor"];
 
 			// To avoid any command injection here, we check if it looks like a key ID
@@ -445,6 +449,10 @@ export default class GpgPlugin extends Plugin {
 
 	async decrypt(encryptedText: string): Promise<string> {
 		if (this.settings.backend == Backend.WRAPPER) {
+			if (Platform.isMobile) {
+				throw new Error("GnuPG CLI Wrapper mode is not supported on mobile devices.");
+			}
+			
 			const args: string[] = [];
 
 			if(this.settings.backendWrapper.trustModelAlways) {
@@ -692,6 +700,12 @@ export default class GpgPlugin extends Plugin {
 
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
 
+		// Ensure native backend on mobile devices
+		// e.g. in case the plugin config is synchronized
+		if (Platform.isMobile) {
+			this.settings.backend = Backend.NATIVE;
+		}
+		
 		// ensure that the passphraseTimeout is minimum 10s
 		if (this.settings.passphraseTimeout < 10) {
 			this.settings.passphraseTimeout = 10;
