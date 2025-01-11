@@ -127,10 +127,25 @@ export default class GpgPlugin extends Plugin {
 		this.app.vault.adapter.write = this.hookedAdapterWriteRef;
 		this.app.vault.adapter.process = this.hookedAdapterProcessRef;
 		this.app.vault.cachedRead = this.hookedVaultCachedReadRef;
+
+		// Obsidian introduced in their internal "file-recovery" some event registrations.
+		// As the general patching doesnt work with them (as the event registration references will still show to the original functions), 
+		// we are deactivating the events, patching the functions and the re-registering them.
+		//@ts-ignore
+		this.app.vault.off('modify', this.app.internalPlugins.plugins["file-recovery"].instance.onFileChanged);
+		//@ts-ignore
+		this.app.workspace.off('file-open', this.app.internalPlugins.plugins["file-recovery"].instance.onFileChanged);
+
 		//@ts-ignore
 		this.app.internalPlugins.plugins["file-recovery"].instance.onFileChanged = this.hookedFileRecoveryOnFileChangeRef;
 		//@ts-ignore
 		this.app.internalPlugins.plugins["file-recovery"].instance.forceAdd = this.hookedFileRecoveryForceAddRef;
+
+		//@ts-ignore
+		this.app.vault.on('modify', this.app.internalPlugins.plugins["file-recovery"].instance.onFileChanged);
+		//@ts-ignore
+		this.app.workspace.on('file-open', this.app.internalPlugins.plugins["file-recovery"].instance.onFileChanged);
+
 
 		// register gpg files as markdown
 		this.registerExtensions(["gpg"], "markdown");
@@ -195,11 +210,20 @@ export default class GpgPlugin extends Plugin {
 		this.app.vault.adapter.write = this.originalAdapterWriteFunction;
 		this.app.vault.adapter.process = this.originalAdapterProcessFunction;
 		this.app.vault.cachedRead = this.originalVaultCachedReadFunction;
+		
+		// restore file-recovery events and functions.
+		//@ts-ignore
+		this.app.vault.off('modify', this.app.internalPlugins.plugins["file-recovery"].instance.onFileChanged);
+		//@ts-ignore
+		this.app.workspace.off('file-open', this.app.internalPlugins.plugins["file-recovery"].instance.onFileChanged);
 		//@ts-ignore
 		this.app.internalPlugins.plugins["file-recovery"].instance.onFileChanged = this.originalFileRecoveryOnFileChangeFunction;
 		//@ts-ignore
 		this.app.internalPlugins.plugins["file-recovery"].instance.forceAdd = this.originalFileRecoveryForceAddFunction;
-
+		//@ts-ignore
+		this.app.vault.on('modify', this.app.internalPlugins.plugins["file-recovery"].instance.onFileChanged);
+		//@ts-ignore
+		this.app.workspace.on('file-open', this.app.internalPlugins.plugins["file-recovery"].instance.onFileChanged);
 
 		this.statusBarFileState.remove();
 		super.onunload();
