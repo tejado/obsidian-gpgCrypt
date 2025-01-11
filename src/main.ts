@@ -31,8 +31,6 @@ export default class GpgPlugin extends Plugin {
 
 	private statusBarFileState: HTMLElement;
 
-	private layoutReady = false;
-
 	// Stores the PassphraseRequest promise to avoid re-prompting in case of a correct
 	// passphrase, when Obsidian is doing multiple async read calls.
 	private passphraseRequestPromise: Promise<string | null> | null = null;
@@ -68,7 +66,8 @@ export default class GpgPlugin extends Plugin {
 		this.cache = BackendPassphraseCache.create(this);
 
 		// load settings
-		await this.loadSettings();
+		await this.loadSettings();	
+		this.loadKeypair();
 
 		this.addSettingTab(new SettingsTab(this.app, this, this.settings));
 
@@ -89,9 +88,6 @@ export default class GpgPlugin extends Plugin {
 					this.app.setting.openTabById("gpg-crypt");
 				}
 			}
-
-			this.loadKeypair();
-			this.layoutReady = true;
 		});
 
 
@@ -495,12 +491,9 @@ export default class GpgPlugin extends Plugin {
 			}
 		}
 
-		if(!this.gpgNative.hasPrivateKey() && this.layoutReady == false) {
-			throw new Error("Please open the note again: key pair has not been loaded yet!");
-		} else if (!this.gpgNative.hasPrivateKey()) {
-			throw new Error("No private key for decryption configured!");
+		if(!this.gpgNative.hasPrivateKey()) {
+			await this.loadKeypair();
 		}
-
 
 		// If key not encrypted, decrypt immediately
 		if (!this.gpgNative.isPrivateKeyEncrypted()) {
