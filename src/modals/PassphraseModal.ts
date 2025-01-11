@@ -23,6 +23,9 @@ export default class PassphraseModal extends Modal {
 	}
 
 	onOpen(): void {
+		// Show modal even when Obsidian is on loading screen
+		this.containerEl.style.zIndex = "99999";
+
 		const { contentEl } = this;
 
 		contentEl.createDiv({ cls: "modal-title", text: `Enter passphrase${this.additionalDescription}` });
