@@ -4,4 +4,5 @@ export interface BackendWrapperSettings {
 
     trustModelAlways: boolean;
     compression: boolean;
+    cache: boolean;
 }

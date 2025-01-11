@@ -11,6 +11,7 @@ import DialogModal from "./modals/DialogModal";
 import PassphraseModal from "./modals/PassphraseModal";
 import GenerateKeypairModal from "./modals/GenerateKeypairModal";
 import WelcomeModal from "./modals/WelcomeModal";
+import WrapperDecryptModal from "./modals/WrapperDecryptModal";
 
 
 // The duration of Notice alerts in milliseconds
@@ -35,6 +36,10 @@ export default class GpgPlugin extends Plugin {
 	// Stores the PassphraseRequest promise to avoid re-prompting in case of a correct
 	// passphrase, when Obsidian is doing multiple async read calls.
 	private passphraseRequestPromise: Promise<string | null> | null = null;
+
+	// Stores BackendWrapper.decrypt promise per encrypted text to avoid re-execution of GPG exec
+	// when Obisidan is doing multiple async read calls
+	private wrapperDecryptionCache = new Map<string, Promise<string>>();
 
 	// Avoid multiple error notices when passphrase requet gets canceled
 	private errorNoticeShown = false;
@@ -214,7 +219,7 @@ export default class GpgPlugin extends Plugin {
 		}
 		
 		if (isEncrypted) {
-			return await this.decrypt(content);
+			return await this.decrypt(normalizedPath, content);
 		}
 
 		return content;
@@ -447,19 +452,23 @@ export default class GpgPlugin extends Plugin {
 		}
 	}
 
-	async decrypt(encryptedText: string): Promise<string> {
+	async decrypt(fileName: string, encryptedText: string): Promise<string> {
 		if (this.settings.backend == Backend.WRAPPER) {
 			if (Platform.isMobile) {
 				throw new Error("GnuPG CLI Wrapper mode is not supported on mobile devices.");
 			}
 			
-			const args: string[] = [];
+			try {
+				return await this.requestWrapperDecrypt(fileName, encryptedText);
+			} catch (error) {
+				// Avoid a duplicated error notice
+				if (!this.errorNoticeShown) {		
+					this.errorNoticeShown = true;
+					new Notice(error.message, NOTICE_DURATION_MS);
+				}
 
-			if(this.settings.backendWrapper.trustModelAlways) {
-				args.push("--trust-model", "always");
+				throw error;
 			}
-
-			return this.gpgWrapper.decrypt(encryptedText);
 		}
 
 		if(!this.gpgNative.hasPrivateKey() && this.layoutReady == false) {
@@ -497,7 +506,7 @@ export default class GpgPlugin extends Plugin {
 					// Avoid a duplicated error notice
 					if (!this.errorNoticeShown) {		
 						this.errorNoticeShown = true;
-						new Notice(error.message);
+						new Notice(error.message, NOTICE_DURATION_MS);
 					}
 				} else {
 					throw error;
@@ -521,9 +530,9 @@ export default class GpgPlugin extends Plugin {
 				this.errorNoticeShown = false;
 
 				resolve(passphrase);
-			} catch (err) {
-				new Notice(err.message);
-				reject(err);
+			} catch (error) {
+				new Notice(error.message, NOTICE_DURATION_MS);
+				reject(error);
 			} finally {
 				// Reset for the next time we need a passphrase
 				this.passphraseRequestPromise = null;
@@ -531,6 +540,54 @@ export default class GpgPlugin extends Plugin {
 		});
 		
 		return this.passphraseRequestPromise;
+	}
+
+	private async requestWrapperDecrypt(file: string, encryptedText: string): Promise<string> {
+		// If we already have a request in flight (with the same encrypted text), share it
+		if (this.wrapperDecryptionCache.has(encryptedText)) {
+			return this.wrapperDecryptionCache.get(encryptedText)!;
+		}
+
+		this.wrapperDecryptionCache.set(encryptedText,  new Promise(async (resolve, reject) => {
+			// Once we do execute the promise, allow ONE new notice.
+			// This avoids multiple Notices due to multiple Obsidian read calls
+			this.errorNoticeShown = false;
+			const modal = new WrapperDecryptModal(this.app, file);
+
+			let errorOccurred = false; 
+
+			try {	
+				modal.open();
+
+				const args: string[] = [];
+
+				if(this.settings.backendWrapper.trustModelAlways) {
+					args.push("--trust-model", "always");
+				}
+
+				// Init the decryption process to get the kill function
+				const decryption =  this.gpgWrapper.initDecrypt(encryptedText);
+
+				// Set the onCancel function in the moda, in case the user inititates the cancellation of the decryption process
+				modal.setOnCancelFn(decryption.kill);
+
+				const decryptedText = await this.gpgWrapper.processDecrypt(decryption.gpgResult);
+				resolve(decryptedText);
+			} catch (error) {
+				errorOccurred = true;
+				reject(error);
+			} finally {
+				modal.close();
+
+				// Reset for the next time we need an external decrypt.
+				// If cache option is set and no error occured, the entry is kept for faster note reopening
+				if (!this.settings.backendWrapper.cache || errorOccurred) {
+					this.wrapperDecryptionCache.delete(encryptedText);
+				}
+			}
+		}));
+		
+		return this.wrapperDecryptionCache.get(encryptedText)!;
 	}
 		  
 	async persistentFileEncrypt(file: TFile) {
@@ -693,6 +750,7 @@ export default class GpgPlugin extends Plugin {
 				recipient: "",
 				trustModelAlways: false,
 				compression: false,
+				cache: true,
 			},
 
 			passphraseTimeout: 300
@@ -719,7 +777,7 @@ export default class GpgPlugin extends Plugin {
 		const publicKey = await this.getFileContent(this.settings.backendNative.publicKeyPath);
 		const privateKey = await this.getFileContent(this.settings.backendNative.privateKeyPath);
 
-		this.gpgNative.setKeys(publicKey, privateKey);
+		await this.gpgNative.setKeys(publicKey, privateKey);
 	}
 
 	async saveSettings() {
