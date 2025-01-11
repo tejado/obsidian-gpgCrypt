@@ -24,6 +24,7 @@ export class SettingsTab extends PluginSettingTab {
 	private trustModelSetting: Setting;
 	private compressionSetting: Setting;
 	private recipientSetting: Setting;
+	private cacheSetting: Setting;
 
 	readonly SETTING_RECIPIENT_NAME = "Key ID / Recipient";
 	readonly SETTING_RECIPIENT_DESC = "Select your GPG key which should be used for encryption.";
@@ -217,6 +218,18 @@ export class SettingsTab extends PluginSettingTab {
 					});
 			});
 
+		this.cacheSetting = new Setting(this.containerEl)
+		.setName("Cache decrypted notes")
+		.setDesc("When enabled, decrypted notes are temporarily stored in memory, allowing them to reopen faster if they remain unchanged.")
+		.addToggle(toggle => {
+			toggle.setTooltip("When enabled, decrypted notes are temporarily stored in memory, allowing them to reopen faster if they remain unchanged.")
+				.setValue(this.settings.backendWrapper.cache)
+				.onChange(async (value) => {
+					this.settings.backendWrapper.cache = value;
+					await this.plugin.saveSettings();
+				});
+		});
+
 		this.recipientSetting = new Setting(this.containerEl)
 			.setName(this.SETTING_RECIPIENT_NAME)
 			.setDesc(this.SETTING_RECIPIENT_DESC)
@@ -276,6 +289,7 @@ export class SettingsTab extends PluginSettingTab {
 			this.trustModelSetting.settingEl.show();
 			this.compressionSetting.settingEl.show();
 			this.recipientSetting.settingEl.show();
+			this.cacheSetting.settingEl.show();
 
 			this.checkGpgExecutable(this.settings.backendWrapper.executable);
 			this.refreshRecipientSetting();
@@ -287,6 +301,7 @@ export class SettingsTab extends PluginSettingTab {
 			this.trustModelSetting.settingEl.hide();
 			this.compressionSetting.settingEl.hide();
 			this.recipientSetting.settingEl.hide();
+			this.cacheSetting.settingEl.hide();
 		}
 	}
 

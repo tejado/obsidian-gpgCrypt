@@ -7,55 +7,67 @@ export interface GpgResult {
     error?: Error;
 }
 
-export default function spawnGPG(exec: string, input: string | Buffer | null, defaultArgs: string[], args?: string[]): Promise<GpgResult> {
-	return new Promise((resolve, reject) => {
-		if (!args) {
-			args = [];
-		}
+export interface GpgSpawnResult {
+    gpgResult: Promise<GpgResult>;
+	kill: () => void;
+}
 
-		const gpgArgs = args.concat(defaultArgs);
-		const buffers: Buffer[] = [];
-		let buffersLength = 0;
-		let error = "";
-		const gpg = spawnIt(exec, gpgArgs);
+export default function spawnGPG(exec: string, input: string | Buffer | null, defaultArgs: string[], args?: string[]): GpgSpawnResult {
+    if (!args) {
+        args = [];
+    }
 
-		gpg.stdout.on("data", (buf: Buffer) => {
-			buffers.push(buf);
-			buffersLength += buf.length;
-		});
+    const gpgArgs = args.concat(defaultArgs);
 
-		gpg.stderr.on("data", (buf: Buffer) => {
-			error += buf.toString("utf8");
-		});
+    // Spawn the GPG process and store its reference
+    const childProcess = spawnIt(exec, gpgArgs);
 
-		gpg.on("close", (code: number) => {
-			const msg = Buffer.concat(buffers, buffersLength);
-            
-			if (code !== 0) {
-				reject(new Error(error || msg.toString()));
-				return;
-			}
+    // Create a promise that resolves or rejects based on GPG output
+    const gpgResult = new Promise<GpgResult>((resolve, reject) => {
+        const buffers: Buffer[] = [];
+        let buffersLength = 0;
+        let error = "";
 
-			resolve({
-				result: msg,
-				error: error.length > 0 ? new Error(error) : undefined
-			});
-		});
+        childProcess.stdout.on("data", (buf: Buffer) => {
+            buffers.push(buf);
+            buffersLength += buf.length;
+        });
 
-		gpg.on("error", (err) => {
-			resolve({
-				result: undefined,
-				error: err
-			});
-		});
+        childProcess.stderr.on("data", (buf: Buffer) => {
+            error += buf.toString("utf8");
+        });
 
-		if (input) {
-			gpg.stdin.end(input);
-		}
-	});
+        childProcess.on("close", (code: number) => {
+            const msg = Buffer.concat(buffers, buffersLength);
+            if (code !== 0) {
+                reject(new Error(error || msg.toString()));
+                return;
+            }
+            resolve({
+                result: msg,
+                error: error.length > 0 ? new Error(error) : undefined
+            });
+        });
+
+        childProcess.on("error", (err) => {
+            resolve({
+                result: undefined,
+                error: err
+            });
+        });
+
+        if (input) {
+            childProcess.stdin.end(input);
+        }
+    });
+
+    // Return both the promise and the function to kill the childProcess
+    return { 
+		gpgResult, 
+		kill: () => childProcess.kill("SIGINT")
+	};
 }
 
 function spawnIt(exec: string, args: string[]): ChildProcessWithoutNullStreams {
-	const gpg = spawn(exec, globalArgs.concat(args));
-	return gpg;
+    return spawn(exec, globalArgs.concat(args));
 }

@@ -1,5 +1,5 @@
 import { _log } from "src/common/utils";
-import spawnGPG, { GpgResult } from "./spawnGPG"
+import spawnGPG, { GpgResult, GpgSpawnResult } from "./spawnGPG"
 
 export enum CliPathStatus {
     FOUND = "FOUND",
@@ -86,25 +86,27 @@ export class BackendWrapper {
 	async version(path?: string): Promise<string> {
 		const defaultArgs = ["--logger-fd", "1", "--version"];
 
-		const gpgResult: GpgResult = await spawnGPG(path || this.cliPath, null, defaultArgs);
-		if(gpgResult.result && !gpgResult.error) {
-			return gpgResult.result.toString().trim();
+		const { gpgResult, kill } =  spawnGPG(path || this.cliPath, null, defaultArgs);
+		const { result, error } = await gpgResult;
+		if(result && !error) {
+			return result.toString().trim();
 		} else {
-			throw gpgResult.error;
+			throw error;
 		}
 	}
 
 	async getPublicKeys(): Promise<{ keyID: string; userID: string }[]> {
 		const defaultArgs = ["--logger-fd", "1", "--list-public-keys", "--with-colons"];
     
-		const gpgResult: GpgResult  = await spawnGPG(this.cliPath, null, defaultArgs);
-        
-		if(!gpgResult.result) {
+		const { gpgResult, kill } = spawnGPG(this.cliPath, null, defaultArgs);
+        const { result } = await gpgResult;
+
+		if(!result) {
 			return [];
 		}
         
 		// Split the output by newline
-		const lines = gpgResult.result.toString().trim().split("\n");
+		const lines = result.toString().trim().split("\n");
     
 		// Prepare a list to store the results
 		const keys: { keyID: string; userID: string }[] = [];
@@ -135,23 +137,29 @@ export class BackendWrapper {
 
 	async encrypt(plaintext: string, args?: string[]): Promise<string> {
 		const defaultArgs = ["--encrypt"];
-		const gpgResult = await spawnGPG(this.cliPath, plaintext, defaultArgs, args);
+		const { gpgResult, kill } = spawnGPG(this.cliPath, plaintext, defaultArgs, args);
+
+		const { result, error } = await gpgResult;
        
-		if(gpgResult.result) {
-			return gpgResult.result.toString().trim();
+		if(result) {
+			return result.toString().trim();
 		} else {
-			throw gpgResult.error;
+			throw error;
 		}
 	}
 
-	async decrypt(plaintext: string, args?: string[]): Promise<string> {
+	initDecrypt(plaintext: string, args?: string[]): GpgSpawnResult {
 		const defaultArgs = ["--decrypt"];
-		const gpgResult =  await spawnGPG(this.cliPath, plaintext, defaultArgs, args);
+		return spawnGPG(this.cliPath, plaintext, defaultArgs, args);
+	}
 
-		if(gpgResult.result) {
-			return gpgResult.result.toString().trim();
+	async processDecrypt(gpgResult: Promise<GpgResult>): Promise<string> {
+		const { result, error } = await gpgResult;
+
+		if(result) {
+			return result.toString().trim();
 		} else {
-			throw gpgResult.error;
+			throw error;
 		}
 	}
 }
