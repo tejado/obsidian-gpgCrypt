@@ -31,16 +31,15 @@ export default class GpgPlugin extends Plugin {
 
 	private statusBarFileState: HTMLElement;
 
+	// Stores decrypt promise per encrypted text to avoid 
+	// 1. re-execution of GPG exec 
+	// 2. multiple Notices
+	// when Obisidan is doing multiple async read calls
+	private decryptionCache = new Map<string, Promise<string>>();
+
 	// Stores the PassphraseRequest promise to avoid re-prompting in case of a correct
 	// passphrase, when Obsidian is doing multiple async read calls.
 	private passphraseRequestPromise: Promise<string | null> | null = null;
-
-	// Stores BackendWrapper.decrypt promise per encrypted text to avoid re-execution of GPG exec
-	// when Obisidan is doing multiple async read calls
-	private wrapperDecryptionCache = new Map<string, Promise<string>>();
-
-	// Avoid multiple error notices when passphrase requet gets canceled
-	private errorNoticeShown = false;
 
 	private originalAdapterReadFunction: (normalizedPath: string) => Promise<string>;
 	private originalAdapterWriteFunction: (normalizedPath: string, data: string, options?: DataWriteOptions) => Promise<void>
@@ -238,11 +237,41 @@ export default class GpgPlugin extends Plugin {
 			this.encryptedFileStatus.set(normalizedPath, isEncrypted);
 		}
 		
-		if (isEncrypted) {
-			return await this.decrypt(normalizedPath, content);
+		if (!isEncrypted) { 
+			return content; 
 		}
 
-		return content;
+		// As Obsidian is doing multiple read calls for one note opening, it doesnt directly output
+		// any exceptions anymore to the user. With this, gpgCrypt has to output any errors to the
+		// user over Notices. To avoid duplicated Notices for the same error, the complete
+		// note decryption part is now taking place in two promises: one external promise which is getting 
+		// cached for multiple calls for the same note and to throw an error on rejection
+		// and an internal promise, to show the Notice only once.
+
+		// If we already have a request in flight (with the same encrypted text), share it
+		if (this.decryptionCache.has(content)) {
+			return this.decryptionCache.get(content)!;
+		}
+
+		this.decryptionCache.set(content,  new Promise(async (resolve, reject) => {
+			let errorOccurred = false; 
+			try {	
+				//await new Promise(res => setTimeout(res, 10000))
+				resolve(await this.decrypt(normalizedPath, content));
+			} catch (error) {
+				errorOccurred = true;
+				reject (error)
+			} finally {
+				// Reset for the next time we need an external decrypt.
+				// If cache option is set and no error occured, the entry is kept for faster note reopening
+				if (errorOccurred || !this.settings.backendWrapper.cache) {
+					// In some cases, the promise is executed too fast so it is getting cached for at least 500ms.
+					setTimeout(() => { _log(`Delete decryption cache for ${normalizedPath}`); this.decryptionCache.delete(content); }, 500);
+				}
+			}
+		}));
+		
+		return this.decryptionCache.get(content)!;
 	}
 
 	// Gets executed when Obsidian writes a file
@@ -473,21 +502,35 @@ export default class GpgPlugin extends Plugin {
 	}
 
 	async decrypt(fileName: string, encryptedText: string): Promise<string> {
+	
 		if (this.settings.backend == Backend.WRAPPER) {
 			if (Platform.isMobile) {
 				throw new Error("GnuPG CLI Wrapper mode is not supported on mobile devices.");
 			}
-			
-			try {
-				return await this.requestWrapperDecrypt(fileName, encryptedText);
-			} catch (error) {
-				// Avoid a duplicated error notice
-				if (!this.errorNoticeShown) {		
-					this.errorNoticeShown = true;
-					new Notice(error.message, NOTICE_DURATION_MS);
+
+			const modal = new WrapperDecryptModal(this.app, fileName);
+
+			try {	
+				modal.open();
+
+				const args: string[] = [];
+				if(this.settings.backendWrapper.trustModelAlways) {
+					args.push("--trust-model", "always");
 				}
 
+				// Init the decryption process to get the kill function
+				const decryption =  this.gpgWrapper.initDecrypt(encryptedText);
+
+				// Set the onCancel function in the moda, in case the user inititates the cancellation of the decryption process
+				modal.setOnCancelFn(decryption.kill);
+
+				return await this.gpgWrapper.processDecrypt(decryption.gpgResult);
+			} catch (error) {
+				_log(error);
+				new Notice(error.message, NOTICE_DURATION_MS);
 				throw error;
+			} finally {
+				modal.close();
 			}
 		}
 
@@ -495,19 +538,17 @@ export default class GpgPlugin extends Plugin {
 			await this.loadKeypair();
 		}
 
-		// If key not encrypted, decrypt immediately
-		if (!this.gpgNative.isPrivateKeyEncrypted()) {
-			return this.gpgNative.decrypt(encryptedText, null);
-		}
-
+		let passphrase: string | null = null;
 		// eslint-disable-next-line no-constant-condition
 		while (true) {
-			let passphrase = this.cache.getPassphrase();
-			if (!passphrase) {
-				passphrase = await this.requestPassphraseModal();
-			}
-		
 			try {
+				if(this.gpgNative.isPrivateKeyEncrypted()) {
+					passphrase = this.cache.getPassphrase();
+					if (!passphrase) {
+						passphrase = await this.requestPassphraseModal();
+					}
+				}
+
 				const plainntext = await this.gpgNative.decrypt(encryptedText, passphrase);
 
 				// only cache password when the decryption was successul and a passphrase was used
@@ -518,14 +559,8 @@ export default class GpgPlugin extends Plugin {
 				return plainntext;
 			} catch (error) {
 				_log(error);
-
-				if(error.message.includes("Incorrect key passphrase")) {
-					// Avoid a duplicated error notice
-					if (!this.errorNoticeShown) {		
-						this.errorNoticeShown = true;
-						new Notice(error.message, NOTICE_DURATION_MS);
-					}
-				} else {
+				new Notice(error.message);
+				if(!error.message.includes("Incorrect key passphrase")) {
 					throw error;
 				}
 			}
@@ -541,14 +576,8 @@ export default class GpgPlugin extends Plugin {
 		this.passphraseRequestPromise = new Promise(async (resolve, reject) => {
 			try {
 				const passphrase = await new PassphraseModal(this.app).openAndAwait(` for private key "${this.settings.backendNative.privateKeyPath}"`);
-
-				// Once we do prompt (i.e., a new passphrase attempt), allow ONE new notice if the passphrase is wrong.
-				// This avoids multiple Notices due to multiple Obsidian read calls
-				this.errorNoticeShown = false;
-
 				resolve(passphrase);
 			} catch (error) {
-				new Notice(error.message, NOTICE_DURATION_MS);
 				reject(error);
 			} finally {
 				// Reset for the next time we need a passphrase
@@ -559,54 +588,6 @@ export default class GpgPlugin extends Plugin {
 		return this.passphraseRequestPromise;
 	}
 
-	private async requestWrapperDecrypt(file: string, encryptedText: string): Promise<string> {
-		// If we already have a request in flight (with the same encrypted text), share it
-		if (this.wrapperDecryptionCache.has(encryptedText)) {
-			return this.wrapperDecryptionCache.get(encryptedText)!;
-		}
-
-		this.wrapperDecryptionCache.set(encryptedText,  new Promise(async (resolve, reject) => {
-			// Once we do execute the promise, allow ONE new notice.
-			// This avoids multiple Notices due to multiple Obsidian read calls
-			this.errorNoticeShown = false;
-			const modal = new WrapperDecryptModal(this.app, file);
-
-			let errorOccurred = false; 
-
-			try {	
-				modal.open();
-
-				const args: string[] = [];
-
-				if(this.settings.backendWrapper.trustModelAlways) {
-					args.push("--trust-model", "always");
-				}
-
-				// Init the decryption process to get the kill function
-				const decryption =  this.gpgWrapper.initDecrypt(encryptedText);
-
-				// Set the onCancel function in the moda, in case the user inititates the cancellation of the decryption process
-				modal.setOnCancelFn(decryption.kill);
-
-				const decryptedText = await this.gpgWrapper.processDecrypt(decryption.gpgResult);
-				resolve(decryptedText);
-			} catch (error) {
-				errorOccurred = true;
-				reject(error);
-			} finally {
-				modal.close();
-
-				// Reset for the next time we need an external decrypt.
-				// If cache option is set and no error occured, the entry is kept for faster note reopening
-				if (!this.settings.backendWrapper.cache || errorOccurred) {
-					this.wrapperDecryptionCache.delete(encryptedText);
-				}
-			}
-		}));
-		
-		return this.wrapperDecryptionCache.get(encryptedText)!;
-	}
-		  
 	async persistentFileEncrypt(file: TFile) {
 		try {
 
