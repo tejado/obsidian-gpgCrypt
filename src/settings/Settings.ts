@@ -23,5 +23,6 @@ export interface Settings {
 	backendNative : BackendNativeSettings;
 	backendWrapper : BackendWrapperSettings;
 
+	askPassphraseOnStartup: boolean;
 	passphraseTimeout: number;
 }

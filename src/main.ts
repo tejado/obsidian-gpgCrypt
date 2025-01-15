@@ -66,8 +66,7 @@ export default class GpgPlugin extends Plugin {
 
 		// load settings
 		await this.loadSettings();	
-		this.loadKeypair();
-
+		
 		this.addSettingTab(new SettingsTab(this.app, this, this.settings));
 
 		// load the keys when the layout is ready
@@ -85,6 +84,35 @@ export default class GpgPlugin extends Plugin {
 					this.app.setting.open("gpg-crypt");
 					//@ts-ignore
 					this.app.setting.openTabById("gpg-crypt");
+				}
+
+				return;
+			}
+
+			// load keys
+			await this.loadKeypair();
+
+			// Ask for passphrase during startup if set
+			if (this.settings.backend == Backend.NATIVE && this.settings.askPassphraseOnStartup && this.gpgNative.isPrivateKeyEncrypted() && !this.cache.hasPassphrase()) {
+				while (true) {
+					try {
+						let passphrase = await this.requestPassphraseModal();
+						await this.gpgNative.testPassphrase(passphrase);
+
+						// only cache password when the passphrase test was successful
+						if (passphrase) { 
+							this.cache.setPassphrase(passphrase);
+							new Notice(`Private key successfully unlocked. It will remain unlocked for ${this.settings.passphraseTimeout} seconds.`)
+							break;
+						}
+					} catch (error) {
+						_log(error);
+						new Notice(error.message);
+
+						if(!error.message.includes("Incorrect key passphrase")) {
+							break;
+						}
+					} 
 				}
 			}
 		});
@@ -751,6 +779,7 @@ export default class GpgPlugin extends Plugin {
 				cache: true,
 			},
 
+			askPassphraseOnStartup: false,
 			passphraseTimeout: 300
 		}
 

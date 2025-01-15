@@ -26,6 +26,9 @@ export class BackendPassphraseCache {
 		return (!isNaN(timeout) && timeout > -1 && timeout < 60*60*24*30);
 	}
 
+	public hasPassphrase(): boolean {
+		return (this.passphrase != null);
+	}
 
 	public setPassphrase(passphrase: string) {
 		// cache the pasphrase only when cache is enabled and 

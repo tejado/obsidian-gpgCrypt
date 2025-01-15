@@ -83,6 +83,25 @@ export class BackendNative {
 		return decrypted;
 	}
 
+	async testPassphrase(passphrase: string | null) {
+		if(!this.privateKey || !this.privateKeyArmored) {
+			throw new Error("No private key for decryption configured!");
+		}
+
+		if (!this.isPrivateKeyEncrypted()) { 
+			throw new Error("Private key is not encrypted.");
+		}
+
+		if(passphrase === null) { 
+			throw new Error("No passphrase for private key provided!");
+		}
+	
+		await openpgp.decryptKey({
+			privateKey: await openpgp.readPrivateKey({ armoredKey: this.privateKeyArmored }),
+			passphrase
+		});
+	}
+
 	async isEncrypted(content: string | null): Promise<boolean> {
 		if (content == null) {
 			return false;
