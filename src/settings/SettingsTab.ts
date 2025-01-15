@@ -17,6 +17,7 @@ export class SettingsTab extends PluginSettingTab {
 	// OpenPGP.js (native) Settings
 	private nativePublicKeySetting: Setting;
 	private nativePrivateKeySetting: Setting;
+	private nativeAskPassphraseOnStartupSetting: Setting;
 	private nativeRememberPassphraseSetting: Setting;
 
 	// Gpg CLI Wrapper (wrapper) Settings
@@ -158,6 +159,18 @@ export class SettingsTab extends PluginSettingTab {
 					});
 			});
 
+		this.nativeAskPassphraseOnStartupSetting  = new Setting(this.containerEl)
+			.setName("Ask passphrase on startup")
+			.setDesc("When enabled, this setting will prompt for the passphrase for your private key during the Obsidian app startup. This works with the 'Remember Passphrase' setting, so you might be asked again depending on how long it's set to remember.")
+			.addToggle(toggle => {
+				toggle.setTooltip("When enabled, this setting will prompt for the passphrase for your private key during the Obsidian app startup. This works with the 'Remember Passphrase' setting, so you might be asked again depending on how long it's set to remember.")
+					.setValue(this.settings.askPassphraseOnStartup)
+					.onChange(async (value) => {
+						this.settings.askPassphraseOnStartup = value;
+						await this.plugin.saveSettings();
+					});
+			});
+
 		this.nativeRememberPassphraseSetting = new Setting(this.containerEl)
 			.setName("Remember passphrase")
 			.setDesc("Duration (in seconds) for which Obsidian remembers your private key passphrase before prompting you again. Minimum: 10 seconds. If you close or restart the app, you'll need to enter your passphrase again.")
@@ -284,6 +297,7 @@ export class SettingsTab extends PluginSettingTab {
 		if (this.settings.backend === Backend.WRAPPER) {
 			this.nativePublicKeySetting.settingEl.hide();
 			this.nativePrivateKeySetting.settingEl.hide();
+			this.nativeAskPassphraseOnStartupSetting.settingEl.hide();
 			this.nativeRememberPassphraseSetting.settingEl.hide();
 			this.executableSetting.settingEl.show();
 			this.trustModelSetting.settingEl.show();
@@ -296,6 +310,7 @@ export class SettingsTab extends PluginSettingTab {
 		} else {
 			this.nativePublicKeySetting.settingEl.show();
 			this.nativePrivateKeySetting.settingEl.show();
+			this.nativeAskPassphraseOnStartupSetting.settingEl.show();
 			this.nativeRememberPassphraseSetting.settingEl.show();
 			this.executableSetting.settingEl.hide();
 			this.trustModelSetting.settingEl.hide();
