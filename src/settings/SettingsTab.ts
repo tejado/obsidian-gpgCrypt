@@ -108,9 +108,9 @@ export class SettingsTab extends PluginSettingTab {
 						.setValue(this.settings.backend)
 						.onChange(async value => {
 							this.settings.backend = value;
-							await this.plugin.saveSettings();
-
 							this.refreshBackendSettings();
+							
+							await this.plugin.saveSettings();
 						});
 				});
 		}
@@ -302,6 +302,8 @@ export class SettingsTab extends PluginSettingTab {
 			this.compressionSetting.settingEl.hide();
 			this.recipientSetting.settingEl.hide();
 			this.cacheSetting.settingEl.hide();
+
+			this.settings.backendWrapper.cache = false;
 		}
 	}
 
