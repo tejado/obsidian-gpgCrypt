@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-gpgCrypt",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"description": "Seamlessly encrypts your notes using GPG. Supports smartcards for enhanced security! Keep your information safe and accessible only to you.",
 	"main": "main.js",
 	"scripts": {
