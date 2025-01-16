@@ -120,8 +120,7 @@ export class BackendNative {
 
 	async generateKeypair(name: string, email: string, passphrase: string): Promise<{publicKey: string, privateKey: string}> {
 		const { privateKey, publicKey } = await openpgp.generateKey({
-			type: "ecc",
-			curve: "curve25519",
+			type: 'curve25519',
 			userIDs: [{ name: name, email: email}], 
 			passphrase: passphrase,
 			format: "armored"
