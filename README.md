@@ -5,7 +5,6 @@ It integrates OpenPGP.js or your local GnuPG installation. For those seeking mor
 
 [gpgCrypt](https://github.com/tejado/obsidian-gpgCrypt) is developed by [github.com/tejado](https://github.com/tejado).
 
-**Note:** The Obsidian plugin is still in beta! Use it at your own risk!  
 **Warning:** Encrypted notes might be stored unencrypted on disk due to Obsidian's caching mechanisms, coredumps, or other reasons.
 
 ### Features
@@ -19,6 +18,7 @@ It integrates OpenPGP.js or your local GnuPG installation. For those seeking mor
 - Enable/disable compression
 - Tested with Obsidian Sync
 - Status bar integration
+- Support for mobile devices (only with OpenPGP.js)
 
 ## Installation
 
@@ -80,7 +80,6 @@ gpg --decrypt --output - path/to/vault/note.md
 ## Limitations
 
 - Only Markdown (.md) files are supported for now, as Obsidian handles other file types (like PDFs or images) in different ways.
-- Desktop-only as it was not yet tested on mobile clients.
 - For OpenPGP.js, the key pair needs to be located inside the Obsidian Vault.
 - No signature support
 - No symmetric encryption 
@@ -98,3 +97,4 @@ gpg --decrypt --output - path/to/vault/note.md
 
 - [mnaoumov](https://github.com/mnaoumov) gave me the decisive hint about the Obsidian API.
 - [meld-cp](https://github.com/meld-cp) partly inspired me with his [Meld Encrypt](https://github.com/meld-cp/obsidian-encrypt) plugin.
+- [vits](https://github.com/vits) fixed two bugs in a way that I hadnt thought of.
