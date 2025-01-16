@@ -80,7 +80,6 @@ gpg --decrypt --output - path/to/vault/note.md
 ## Limitations
 
 - Only Markdown (.md) files are supported for now, as Obsidian handles other file types (like PDFs or images) in different ways.
-- For OpenPGP.js, the key pair needs to be located inside the Obsidian Vault.
 - No signature support
 - No symmetric encryption 
 

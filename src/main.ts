@@ -714,8 +714,35 @@ export default class GpgPlugin extends Plugin {
 		if (file instanceof TFile) {
 			return await this.app.vault.read(file);
 		}
-		
+
 		return null;
+	}
+
+	async getFileContentExternal(path: string): Promise<string | null> {
+		const file = this.app.vault.getAbstractFileByPath(normalizePath(path));
+	
+		if (file instanceof TFile) {
+			return await this.app.vault.read(file);
+		}
+
+		_log("getFileContentExternal - File not found - External file fallback");
+		try {
+			const resourcePath = this.app.vault.adapter.getResourcePath(path)
+			_log(`getFileContentExternal resource path: ${resourcePath}`);
+
+			const response = await fetch(resourcePath);
+			const content = await response.text();
+			
+			if (content.length == 0){
+				return null;
+			}
+
+			_log(`getFileContentExternal content: ${content}`);
+			return content;
+		} catch(error) {
+			_log(error);
+			return null;
+		}
 	}
 
 	async generateKeypair() {
@@ -801,8 +828,8 @@ export default class GpgPlugin extends Plugin {
 	}
 
 	async loadKeypair() {
-		const publicKey = await this.getFileContent(this.settings.backendNative.publicKeyPath);
-		const privateKey = await this.getFileContent(this.settings.backendNative.privateKeyPath);
+		const publicKey = await this.getFileContentExternal(this.settings.backendNative.publicKeyPath);
+		const privateKey = await this.getFileContentExternal(this.settings.backendNative.privateKeyPath);
 
 		await this.gpgNative.setKeys(publicKey, privateKey);
 	}
