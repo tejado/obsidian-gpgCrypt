@@ -539,7 +539,9 @@ export default class GpgPlugin extends Plugin {
 			const modal = new WrapperDecryptModal(this.app, fileName);
 
 			try {	
-				modal.open();
+				if (this.settings.backendWrapper.showDecryptModal) {
+					modal.open();
+				}
 
 				const args: string[] = [];
 				if(this.settings.backendWrapper.trustModelAlways) {
@@ -550,7 +552,9 @@ export default class GpgPlugin extends Plugin {
 				const decryption =  this.gpgWrapper.initDecrypt(encryptedText);
 
 				// Set the onCancel function in the moda, in case the user inititates the cancellation of the decryption process
-				modal.setOnCancelFn(decryption.kill);
+				if (this.settings.backendWrapper.showDecryptModal) {
+					modal.setOnCancelFn(decryption.kill);
+				}
 
 				return await this.gpgWrapper.processDecrypt(decryption.gpgResult);
 			} catch (error) {
@@ -558,7 +562,9 @@ export default class GpgPlugin extends Plugin {
 				new Notice(error.message, NOTICE_DURATION_MS);
 				throw error;
 			} finally {
-				modal.close();
+				if (this.settings.backendWrapper.showDecryptModal) {
+					modal.close();
+				}
 			}
 		}
 
@@ -804,6 +810,7 @@ export default class GpgPlugin extends Plugin {
 				trustModelAlways: false,
 				compression: false,
 				cache: true,
+				showDecryptModal: true,
 			},
 
 			askPassphraseOnStartup: false,

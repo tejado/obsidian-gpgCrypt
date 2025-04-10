@@ -26,6 +26,7 @@ export class SettingsTab extends PluginSettingTab {
 	private compressionSetting: Setting;
 	private recipientSetting: Setting;
 	private cacheSetting: Setting;
+	private showDecryptModalSetting: Setting;
 
 	readonly SETTING_RECIPIENT_NAME = "Key ID / Recipient";
 	readonly SETTING_RECIPIENT_DESC = "Select your GPG key which should be used for encryption.";
@@ -252,6 +253,18 @@ export class SettingsTab extends PluginSettingTab {
 					.setDisabled(true);
 			});
 
+		this.showDecryptModalSetting = new Setting(this.containerEl)
+		.setName("Show decryption dialog")
+		.setDesc("When enabled, a 'Decryption in progress' dialog appears while your note is being decrypted using GnuPG CLI.")
+		.addToggle(toggle => {
+			toggle.setTooltip("When enabled, a 'Decryption in progress' dialog appears while your file is being decrypted using GnuPG CLI.")
+				.setValue(this.settings.backendWrapper.showDecryptModal)
+				.onChange(async (value) => {
+					this.settings.backendWrapper.showDecryptModal = value;
+					await this.plugin.saveSettings();
+				});
+		});
+
 		// build common settings
 		new Setting(this.containerEl)
 			.setHeading()
@@ -304,6 +317,7 @@ export class SettingsTab extends PluginSettingTab {
 			this.compressionSetting.settingEl.show();
 			this.recipientSetting.settingEl.show();
 			this.cacheSetting.settingEl.show();
+			this.showDecryptModalSetting.settingEl.show();
 
 			this.checkGpgExecutable(this.settings.backendWrapper.executable);
 			this.refreshRecipientSetting();
@@ -317,6 +331,7 @@ export class SettingsTab extends PluginSettingTab {
 			this.compressionSetting.settingEl.hide();
 			this.recipientSetting.settingEl.hide();
 			this.cacheSetting.settingEl.hide();
+			this.showDecryptModalSetting.settingEl.hide();
 
 			this.settings.backendWrapper.cache = false;
 		}
