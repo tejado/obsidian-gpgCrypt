@@ -18,7 +18,7 @@ export class BackendPassphraseCache {
 
 	private constructor(plugin: GpgPlugin) {
 		this.setTimeout(this.timeout);
-		plugin.registerInterval(window.setInterval(() => this.clearCache(), 1000));
+		plugin.registerInterval(window.setInterval(() => this.clearCache(), 10000));
 	}
 
 
@@ -47,6 +47,13 @@ export class BackendPassphraseCache {
 		if (BackendPassphraseCache.isValidTimeout(timeout)) {
 			this.timeout = timeout;
 		}
+	}
+
+	public resetTimeout() {
+		// clear the cache first - in case it has already expired
+		this.clearCache();
+
+		this.lastSet = Date.now();
 	}
 
 	private clearCache() {

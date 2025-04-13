@@ -25,4 +25,5 @@ export interface Settings {
 
 	askPassphraseOnStartup: boolean;
 	passphraseTimeout: number;
+	resetPassphraseTimeoutOnWrite: boolean;
 }

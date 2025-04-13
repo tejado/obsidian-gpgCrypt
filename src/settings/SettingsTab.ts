@@ -19,6 +19,7 @@ export class SettingsTab extends PluginSettingTab {
 	private nativePrivateKeySetting: Setting;
 	private nativeAskPassphraseOnStartupSetting: Setting;
 	private nativeRememberPassphraseSetting: Setting;
+	private nativeResetPassphraseTimeoutOnWriteSetting: Setting;
 
 	// Gpg CLI Wrapper (wrapper) Settings
 	private executableSetting: Setting;
@@ -194,6 +195,18 @@ export class SettingsTab extends PluginSettingTab {
 						}
 					});
 			});
+			
+		this.nativeResetPassphraseTimeoutOnWriteSetting  = new Setting(this.containerEl)
+			.setName("Restart passphrase timeout on save")
+			.setDesc("When enabled, the countdown for how long your passphrase is remembered will restart every time an encrypted note is saved, preventing frequent re-entry that may occur with some other plugins.")
+			.addToggle(toggle => {
+				toggle.setTooltip("When enabled, the countdown for how long your passphrase is remembered will restart every time an encrypted note is saved, preventing frequent re-entry that may occur with some other plugins.")
+					.setValue(this.settings.resetPassphraseTimeoutOnWrite)
+					.onChange(async (value) => {
+						this.settings.resetPassphraseTimeoutOnWrite = value;
+						await this.plugin.saveSettings();
+					});
+			});
         
 
 		// Gpg CLI Wrapper (wrapper) Settings
@@ -312,6 +325,7 @@ export class SettingsTab extends PluginSettingTab {
 			this.nativePrivateKeySetting.settingEl.hide();
 			this.nativeAskPassphraseOnStartupSetting.settingEl.hide();
 			this.nativeRememberPassphraseSetting.settingEl.hide();
+			this.nativeResetPassphraseTimeoutOnWriteSetting.settingEl.hide();
 			this.executableSetting.settingEl.show();
 			this.trustModelSetting.settingEl.show();
 			this.compressionSetting.settingEl.show();
@@ -326,6 +340,7 @@ export class SettingsTab extends PluginSettingTab {
 			this.nativePrivateKeySetting.settingEl.show();
 			this.nativeAskPassphraseOnStartupSetting.settingEl.show();
 			this.nativeRememberPassphraseSetting.settingEl.show();
+			this.nativeResetPassphraseTimeoutOnWriteSetting.settingEl.show();
 			this.executableSetting.settingEl.hide();
 			this.trustModelSetting.settingEl.hide();
 			this.compressionSetting.settingEl.hide();

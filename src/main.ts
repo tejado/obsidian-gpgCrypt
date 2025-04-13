@@ -308,6 +308,7 @@ export default class GpgPlugin extends Plugin {
 
 		// skip encryption if its already encrypted
 		if (await this.gpgNative.isEncrypted(data) === true) {
+			_log('Hooked Adapter - write - skip encryption as it is already encrypted')
 			this.encryptedFileStatus.set(normalizedPath, true);
 			return await this.originalWrite(normalizedPath, data, options)
 		}
@@ -318,6 +319,7 @@ export default class GpgPlugin extends Plugin {
 			content = await this.originalRead(normalizedPath);
 		} catch (error) {
 			// ignore any errors here	
+			_log(`Hooked Adapter - write - originalRead error: ${error}`)
 		}
 		
 		const isEncrypted = await this.gpgNative.isEncrypted(content);
@@ -496,12 +498,19 @@ export default class GpgPlugin extends Plugin {
 
 	async encrypt(plaintext: string): Promise<string> {
 		if (this.settings.backend == Backend.NATIVE) {
+			_log('encrypt - native')
 			if(!this.gpgNative.hasPublicKey()) {
 				throw new Error("No public key for encryption configured!");
 			}
 
+			if(this.settings.resetPassphraseTimeoutOnWrite) {
+				_log('encrypt: reset passphrase timeout')
+				this.cache.resetTimeout();
+			} 
+
 			return this.gpgNative.encrypt(plaintext);
 		} else {
+			_log('encrypt - wrapper')
 			if (Platform.isMobile) {
 				throw new Error("GnuPG CLI Wrapper mode is not supported on mobile devices.");
 			}
@@ -814,7 +823,8 @@ export default class GpgPlugin extends Plugin {
 			},
 
 			askPassphraseOnStartup: false,
-			passphraseTimeout: 300
+			passphraseTimeout: 300,
+			resetPassphraseTimeoutOnWrite: false,
 		}
 
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
