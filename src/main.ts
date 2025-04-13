@@ -42,9 +42,11 @@ export default class GpgPlugin extends Plugin {
 	private passphraseRequestPromise: Promise<string | null> | null = null;
 
 	private originalAdapterReadFunction: (normalizedPath: string) => Promise<string>;
+	private originalAdapterReadBinaryFunction: (normalizedPath: string) => Promise<ArrayBuffer>;
 	private originalAdapterWriteFunction: (normalizedPath: string, data: string, options?: DataWriteOptions) => Promise<void>
 	private originalAdapterProcessFunction: (normalizedPath: string, fn: (data: string) => string, options?: DataWriteOptions) => Promise<string>;
 	private hookedAdapterReadRef: (normalizedPath: string) => Promise<string>;
+	private hookedAdapterReadBinaryRef: (normalizedPath: string) => Promise<ArrayBuffer>;
 	private hookedAdapterWriteRef: (normalizedPath: string, data: string, options?: DataWriteOptions) => Promise<void>;
 	private hookedAdapterProcessRef: (normalizedPath: string, fn: (data: string) => string, options?: DataWriteOptions) => Promise<string>;
 
@@ -126,6 +128,7 @@ export default class GpgPlugin extends Plugin {
 		// save the original Obsidiane functions to call them 
 		// and in case of plugin unload, we restore them
 		this.originalAdapterReadFunction = this.app.vault.adapter.read;
+		this.originalAdapterReadBinaryFunction = this.app.vault.adapter.readBinary;
 		this.originalAdapterWriteFunction = this.app.vault.adapter.write;
 		this.originalAdapterProcessFunction = this.app.vault.adapter.process;
 		this.originalVaultCachedReadFunction = this.app.vault.cachedRead;
@@ -141,12 +144,14 @@ export default class GpgPlugin extends Plugin {
 		// by third-party plugins as this could lead to data-loss when
 		// gpgCrypt plugin gets unloaded.
 		this.hookedAdapterReadRef = this.hookedAdapterRead.bind(this);
+		this.hookedAdapterReadBinaryRef = this.hookedAdapterReadBinary.bind(this);
 		this.hookedAdapterWriteRef = this.hookedAdapterWrite.bind(this);
 		this.hookedAdapterProcessRef = this.hookedAdapterProcess.bind(this);
 		this.hookedVaultCachedReadRef = this.hookedVaultCachedRead.bind(this);
 		this.hookedFileRecoveryOnFileChangeRef  = this.hookedFileRecoveryOnFileChange.bind(this);
 		this.hookedFileRecoveryForceAddRef = this.hookedFileRecoveryForceAdd.bind(this);
 		this.app.vault.adapter.read = this.hookedAdapterReadRef;
+		this.app.vault.adapter.readBinary = this.hookedAdapterReadBinaryRef;
 		this.app.vault.adapter.write = this.hookedAdapterWriteRef;
 		this.app.vault.adapter.process = this.hookedAdapterProcessRef;
 		this.app.vault.cachedRead = this.hookedVaultCachedReadRef;
@@ -213,6 +218,7 @@ export default class GpgPlugin extends Plugin {
 		//@ts-ignore
 		if (
 			this.app.vault.adapter.read != this.hookedAdapterReadRef ||
+			this.app.vault.adapter.readBinary != this.hookedAdapterReadBinaryRef ||
 			this.app.vault.adapter.write != this.hookedAdapterWriteRef ||
 			this.app.vault.adapter.process != this.hookedAdapterProcessRef ||
 			this.app.vault.cachedRead != this.hookedVaultCachedReadRef ||
@@ -230,6 +236,7 @@ export default class GpgPlugin extends Plugin {
 
 		// restore original Obsidian read/write functions
 		this.app.vault.adapter.read = this.originalAdapterReadFunction;
+		this.app.vault.adapter.readBinary = this.originalAdapterReadBinaryFunction;
 		this.app.vault.adapter.write = this.originalAdapterWriteFunction;
 		this.app.vault.adapter.process = this.originalAdapterProcessFunction;
 		this.app.vault.cachedRead = this.originalVaultCachedReadFunction;
@@ -300,6 +307,58 @@ export default class GpgPlugin extends Plugin {
 		}));
 		
 		return this.decryptionCache.get(content)!;
+	}
+
+	// Gets executed when Obsidian reads a binary file
+	// TODO: deduplicate cpde with hookedAdapterRead function
+	private async hookedAdapterReadBinary(normalizedPath: string): Promise<ArrayBuffer> {
+		_log(`Hooked Adapter - readBinary (${normalizedPath})`);
+
+		const contentArray = await this.originalReadBinary(normalizedPath);
+		const content = new TextDecoder().decode(new Uint8Array(contentArray));
+		const isEncrypted = await this.gpgNative.isEncrypted(content);
+
+		// in case the file status is already marked as encrypted, we don't set it to plaintext
+		// so we get a warning in case of the next write
+		if (!this.encryptedFileStatus.has(normalizedPath) || this.encryptedFileStatus.get(normalizedPath) !== true) {
+			this.encryptedFileStatus.set(normalizedPath, isEncrypted);
+		}
+
+		if (!isEncrypted || !this.settings.compatibilityMode) {
+			return contentArray;
+		}
+
+		// As Obsidian is doing multiple read calls for one note opening, it doesnt directly output
+		// any exceptions anymore to the user. With this, gpgCrypt has to output any errors to the
+		// user over Notices. To avoid duplicated Notices for the same error, the complete
+		// note decryption part is now taking place in two promises: one external promise which is getting 
+		// cached for multiple calls for the same note and to throw an error on rejection
+		// and an internal promise, to show the Notice only once.
+
+		// If we already have a request in flight (with the same encrypted text), share it
+		if (this.decryptionCache.has(content)) {
+			return new TextEncoder().encode(await this.decryptionCache.get(content)!);
+		}
+
+		this.decryptionCache.set(content, new Promise(async (resolve, reject) => {
+			let errorOccurred = false;
+			try {
+				//await new Promise(res => setTimeout(res, 10000))
+				resolve(await this.decrypt(normalizedPath, content));
+			} catch (error) {
+				errorOccurred = true;
+				reject(error)
+			} finally {
+				// Reset for the next time we need an external decrypt.
+				// If cache option is set and no error occured, the entry is kept for faster note reopening
+				if (errorOccurred || !this.settings.backendWrapper.cache) {
+					// In some cases, the promise is executed too fast so it is getting cached for at least 500ms.
+					setTimeout(() => { _log(`Delete decryption cache for ${normalizedPath}`); this.decryptionCache.delete(content); }, 500);
+				}
+			}
+		}));
+
+		return new TextEncoder().encode(await this.decryptionCache.get(content)!).buffer;
 	}
 
 	// Gets executed when Obsidian writes a file
@@ -445,6 +504,10 @@ export default class GpgPlugin extends Plugin {
 	
 	async originalRead(normalizedPath: string) {
 		return this.originalAdapterReadFunction.call(this.app.vault.adapter, normalizedPath);
+	}
+
+	async originalReadBinary(normalizedPath: string) {
+		return this.originalAdapterReadBinaryFunction.call(this.app.vault.adapter, normalizedPath);
 	}
 
 	async originalWrite(normalizedPath: string, data: string, options?: DataWriteOptions | undefined) {
@@ -805,6 +868,8 @@ export default class GpgPlugin extends Plugin {
 			renameToGpg: false,
 
 			fileRecovery: FileRecovery.ENCRYPTED,
+
+			compatibilityMode: false,
 
 			backend: Backend.NATIVE,
 

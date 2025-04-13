@@ -18,6 +18,7 @@ export interface Settings {
 	encryptAll: boolean,
 	renameToGpg: boolean,
 	fileRecovery: string,
+	compatibilityMode: boolean;
 	backend: string;
 
 	backendNative : BackendNativeSettings;

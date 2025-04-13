@@ -85,6 +85,21 @@ export class SettingsTab extends PluginSettingTab {
 					});
 			});
 
+		const compatibilityModeSetting = new Setting(this.containerEl)
+			.setName("Compatibility mode")
+			.setDesc("Enable this setting to use Obsidian's native metadata generation needed for features like link blocks and certain plugins (e.g., Excalidraw). ")
+			.addToggle(toggle => {
+				toggle.setTooltip("Enable this setting to use Obsidian's native metadata generation needed for features like link blocks and certain plugins (e.g., Excalidraw). Warning: this exposes plaintext headings and file structure on disk.")
+					.setValue(this.settings.compatibilityMode)
+					.onChange(async (value) => {
+						this.settings.compatibilityMode = value;
+						await this.plugin.saveSettings();
+					});
+			});
+			
+		const warningEl = compatibilityModeSetting.descEl.createSpan({ cls: 'mod-warning' });
+		warningEl.innerText = "Warning: this exposes plaintext headings and file structure on disk.";
+
 		
 		new Setting(this.containerEl)
 			.setHeading()
