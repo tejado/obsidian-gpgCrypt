@@ -60,15 +60,15 @@ export class SettingsTab extends PluginSettingTab {
 			});
 
 		//TODO: disable this (gray it out) if `this.settings.encryptAll` is true
-		new InputListSetting(this.containerEl)
+		const encryptFolders = new InputListSetting(this.containerEl)
 			.setName("Encrypt Folders")
 			.setDesc("TODO: Think of a description")
 			.addButton((button => {
 				button.setButtonText("Add Folder")
+				button.onClick(() => encryptFolders.addInput((text) => { }))
 			}))
-			.addInput((input) => {
-				input.setValue("???")
-			})
+
+
 
 		new Setting(this.containerEl)
 			.setName("Use .gpg file extension")
