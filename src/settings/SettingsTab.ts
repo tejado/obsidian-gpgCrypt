@@ -7,6 +7,7 @@ import { BackendPassphraseCache } from "src/backend/BackendPassphraseCache";
 import GpgPlugin from "src/main";
 import DialogModal from "src/modals/DialogModal";
 import WelcomeModal from "src/modals/WelcomeModal";
+import { InputListSetting } from "./elements/InputList";
 
 export class SettingsTab extends PluginSettingTab {
 	app: App;
@@ -58,6 +59,17 @@ export class SettingsTab extends PluginSettingTab {
 					});
 			});
 
+		//TODO: disable this (gray it out) if `this.settings.encryptAll` is true
+		new InputListSetting(this.containerEl)
+			.setName("Encrypt Folders")
+			.setDesc("TODO: Think of a description")
+			.addButton((button => {
+				button.setButtonText("Add Folder")
+			}))
+			.addInput((input) => {
+				input.setValue("???")
+			})
+
 		new Setting(this.containerEl)
 			.setName("Use .gpg file extension")
 			.setDesc("When enabled, encrypted notes will be renamed with a .gpg file extension. Permanent decryption will rename files to .md extension.")
@@ -96,11 +108,11 @@ export class SettingsTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					});
 			});
-			
+
 		const warningEl = compatibilityModeSetting.descEl.createSpan({ cls: 'mod-warning' });
 		warningEl.innerText = "Warning: this exposes plaintext headings and file structure on disk.";
 
-		
+
 		new Setting(this.containerEl)
 			.setHeading()
 			.setName("Encryption Backend");
@@ -127,7 +139,7 @@ export class SettingsTab extends PluginSettingTab {
 						.onChange(async value => {
 							this.settings.backend = value;
 							this.refreshBackendSettings();
-							
+
 							await this.plugin.saveSettings();
 						});
 				});
@@ -140,9 +152,9 @@ export class SettingsTab extends PluginSettingTab {
 			.setDesc("Path to your public key file.")
 			.addButton(button => {
 				button.setButtonText("Generate new key pair...")
-					.onClick(async() =>  {
+					.onClick(async () => {
 						const success = await this.plugin.generateKeypair();
-						
+
 						if (success) {
 							publicKeyInputField.setValue(this.settings.backendNative.publicKeyPath);
 							privateKeyInputField.setValue(this.settings.backendNative.publicKeyPath);
@@ -176,7 +188,7 @@ export class SettingsTab extends PluginSettingTab {
 					});
 			});
 
-		this.nativeAskPassphraseOnStartupSetting  = new Setting(this.containerEl)
+		this.nativeAskPassphraseOnStartupSetting = new Setting(this.containerEl)
 			.setName("Ask passphrase on startup")
 			.setDesc("When enabled, this setting will prompt for the passphrase for your private key during the Obsidian app startup. This works with the 'Remember Passphrase' setting, so you might be asked again depending on how long it's set to remember.")
 			.addToggle(toggle => {
@@ -210,8 +222,8 @@ export class SettingsTab extends PluginSettingTab {
 						}
 					});
 			});
-			
-		this.nativeResetPassphraseTimeoutOnWriteSetting  = new Setting(this.containerEl)
+
+		this.nativeResetPassphraseTimeoutOnWriteSetting = new Setting(this.containerEl)
 			.setName("Restart passphrase timeout on save")
 			.setDesc("When enabled, the countdown for how long your passphrase is remembered will restart every time an encrypted note is saved, preventing frequent re-entry that may occur with some other plugins.")
 			.addToggle(toggle => {
@@ -222,7 +234,7 @@ export class SettingsTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					});
 			});
-        
+
 
 		// Gpg CLI Wrapper (wrapper) Settings
 		this.executableSetting = new Setting(this.containerEl)
@@ -248,7 +260,7 @@ export class SettingsTab extends PluginSettingTab {
 					});
 			});
 
-		this.compressionSetting  = new Setting(this.containerEl)
+		this.compressionSetting = new Setting(this.containerEl)
 			.setName("Use compression")
 			.setDesc("When disabled then \"--compression-algo none\" is set.")
 			.addToggle(toggle => {
@@ -261,16 +273,16 @@ export class SettingsTab extends PluginSettingTab {
 			});
 
 		this.cacheSetting = new Setting(this.containerEl)
-		.setName("Cache decrypted notes")
-		.setDesc("When enabled, decrypted notes are temporarily stored in memory, allowing them to reopen faster if they remain unchanged.")
-		.addToggle(toggle => {
-			toggle.setTooltip("When enabled, decrypted notes are temporarily stored in memory, allowing them to reopen faster if they remain unchanged.")
-				.setValue(this.settings.backendWrapper.cache)
-				.onChange(async (value) => {
-					this.settings.backendWrapper.cache = value;
-					await this.plugin.saveSettings();
-				});
-		});
+			.setName("Cache decrypted notes")
+			.setDesc("When enabled, decrypted notes are temporarily stored in memory, allowing them to reopen faster if they remain unchanged.")
+			.addToggle(toggle => {
+				toggle.setTooltip("When enabled, decrypted notes are temporarily stored in memory, allowing them to reopen faster if they remain unchanged.")
+					.setValue(this.settings.backendWrapper.cache)
+					.onChange(async (value) => {
+						this.settings.backendWrapper.cache = value;
+						await this.plugin.saveSettings();
+					});
+			});
 
 		this.recipientSetting = new Setting(this.containerEl)
 			.setName(this.SETTING_RECIPIENT_NAME)
@@ -282,16 +294,16 @@ export class SettingsTab extends PluginSettingTab {
 			});
 
 		this.showDecryptModalSetting = new Setting(this.containerEl)
-		.setName("Show decryption dialog")
-		.setDesc("When enabled, a 'Decryption in progress' dialog appears while your note is being decrypted using GnuPG CLI.")
-		.addToggle(toggle => {
-			toggle.setTooltip("When enabled, a 'Decryption in progress' dialog appears while your file is being decrypted using GnuPG CLI.")
-				.setValue(this.settings.backendWrapper.showDecryptModal)
-				.onChange(async (value) => {
-					this.settings.backendWrapper.showDecryptModal = value;
-					await this.plugin.saveSettings();
-				});
-		});
+			.setName("Show decryption dialog")
+			.setDesc("When enabled, a 'Decryption in progress' dialog appears while your note is being decrypted using GnuPG CLI.")
+			.addToggle(toggle => {
+				toggle.setTooltip("When enabled, a 'Decryption in progress' dialog appears while your file is being decrypted using GnuPG CLI.")
+					.setValue(this.settings.backendWrapper.showDecryptModal)
+					.onChange(async (value) => {
+						this.settings.backendWrapper.showDecryptModal = value;
+						await this.plugin.saveSettings();
+					});
+			});
 
 		// build common settings
 		new Setting(this.containerEl)
@@ -304,12 +316,12 @@ export class SettingsTab extends PluginSettingTab {
 			.addButton(button => {
 				button.setButtonText("Open welcome dialog...")
 					.setCta()
-					.onClick(async() => {
+					.onClick(async () => {
 						const action = await new WelcomeModal(this.app, false).openAndAwait();
 
 						if (action === "gen-key") {
 							const success = await this.plugin.generateKeypair();
-						
+
 							if (success) {
 								publicKeyInputField.setValue(this.settings.backendNative.publicKeyPath);
 								privateKeyInputField.setValue(this.settings.backendNative.publicKeyPath);
@@ -374,14 +386,14 @@ export class SettingsTab extends PluginSettingTab {
 		while (this.executableSetting.descEl.firstChild) {
 			this.executableSetting.descEl.removeChild(this.executableSetting.descEl.firstChild);
 		}
-		
+
 		const execSettingDescription = this.executableSetting.descEl.createDiv();
 		execSettingDescription.setText("Path to GPG executable.");
 
 		const execSettingStatus = this.executableSetting.descEl.createDiv();
 		execSettingStatus.setText(`Status: ${message}`);
 
-		if(status === CliPathStatus.FOUND) {
+		if (status === CliPathStatus.FOUND) {
 			execSettingStatus.addClass("mod-success");
 		} else {
 			execSettingStatus.addClass("mod-warning");
@@ -391,9 +403,9 @@ export class SettingsTab extends PluginSettingTab {
 	// check if the gpg executable is working or not
 	private async checkGpgExecutable(path: string) {
 		const result = await this.plugin.gpgWrapper.isGPG(path)
-		
+
 		this.setGpgExecDescription(result);
-		if(result === CliPathStatus.FOUND) {
+		if (result === CliPathStatus.FOUND) {
 			this.plugin.gpgWrapper.setExecutable(path);
 			this.settings.backendWrapper.executable = path;
 			this.plugin.saveSettings();
@@ -433,7 +445,7 @@ export class SettingsTab extends PluginSettingTab {
 				dropdown
 					.setValue(this.settings.backendWrapper.recipient)
 					.onChange(async value => {
-						
+
 						try {
 							const confirmChange = await new DialogModal(this.app).openAndAwait(
 								"When you change the key, existing notes remains encrypted with the old key. The new key will only be applied to future note changes. However, to access notes encrypted with the old key, the old key is necessary for decryption.",

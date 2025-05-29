@@ -1,9 +1,9 @@
 import { BackendNativeSettings } from "src/backend/native/BackendNativeSettings";
 import { BackendWrapperSettings } from "src/backend/wrapper/BackendWrapperSettings";
 
-export enum FileRecovery { 
-    PLAINTEXT = "plaintext",
-    ENCRYPTED = "encrypted",
+export enum FileRecovery {
+	PLAINTEXT = "plaintext",
+	ENCRYPTED = "encrypted",
 	SKIP = "skip",
 }
 
@@ -14,15 +14,16 @@ export const FileRecoveryDescription: { [key in FileRecovery]: string } = {
 };
 
 export interface Settings {
-	firstLoad: boolean, 
+	firstLoad: boolean,
 	encryptAll: boolean,
+	foldersToEncrypt: string[];
 	renameToGpg: boolean,
 	fileRecovery: string,
 	compatibilityMode: boolean;
 	backend: string;
 
-	backendNative : BackendNativeSettings;
-	backendWrapper : BackendWrapperSettings;
+	backendNative: BackendNativeSettings;
+	backendWrapper: BackendWrapperSettings;
 
 	askPassphraseOnStartup: boolean;
 	passphraseTimeout: number;
