@@ -1,5 +1,6 @@
 import { ButtonComponent, Setting, TextComponent } from "obsidian"
 import { IValidator } from "../validators/IValidator";
+import { ErrorTextInput } from "./ErrorTextInput";
 
 export class InputListSetting extends Setting {
 
@@ -21,18 +22,18 @@ export class InputListSetting extends Setting {
 	* @description Wrapper function that 
 	* @returns {@InputListSetting} this
 	*/
-	public addInput(callback: (text: TextComponent) => void, onRemove?: () => void): InputListSetting {
+	public addInput(callback: (text: ErrorTextInput) => void, onRemove?: () => void): InputListSetting {
 
 		const inputContainer = this.inputListContainerEl.createDiv({ cls: 'flex input-gap' })
 
-		const textElement = new TextComponent(inputContainer);
+		const textElement = new ErrorTextInput(inputContainer);
 		callback(textElement);
 		const buttonElement = new ButtonComponent(inputContainer).setButtonText("Remove");
 
 		buttonElement.onClick(() => {
 			onRemove?.()
 			//delete textelement on change setting.
-			textElement.inputEl.remove();
+			textElement.destory();
 			buttonElement.buttonEl.remove();
 		})
 

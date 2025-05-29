@@ -90,12 +90,12 @@ export class SettingsTab extends PluginSettingTab {
 					try {
 						validator.validate(value);
 						this.settings.foldersToEncrypt[idx] = value;
-						text.inputEl.classList.remove('error');
+						text.clearError();
 						await this.plugin.saveSettings();
 					} catch (e) {
 						if (e instanceof ValidationError) {
 							_log(e.message);
-							text.inputEl.classList.add('error');
+							text.throwError(e);
 						}
 					}
 				})

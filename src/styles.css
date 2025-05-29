@@ -31,3 +31,26 @@
 	width: 100%;
 	margin-inline-end: unset !important;
 }
+
+.errorful-input-container {
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
+	gap: 2px;
+	width: 100%;
+}
+
+.error-text {
+	text-align: right;
+	font-weight: 300;
+	font-size: .85em;
+}
+
+.errorful-input-container input {
+	width: 100%;
+}
+
+.errorful-input-container input.error {
+	opacity: .8;
+	border-color: var(--text-error) !important;
+}
