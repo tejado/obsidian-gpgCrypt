@@ -8,6 +8,9 @@ import GpgPlugin from "src/main";
 import DialogModal from "src/modals/DialogModal";
 import WelcomeModal from "src/modals/WelcomeModal";
 import { InputListSetting } from "./elements/InputList";
+import { FolderValidator } from "./validators/ValidateFolderPath";
+import { ValidationError } from "./validators/IValidator";
+import { _log } from "src/common/utils";
 
 export class SettingsTab extends PluginSettingTab {
 	app: App;
@@ -83,8 +86,18 @@ export class SettingsTab extends PluginSettingTab {
 				text.setValue(folder);
 				//TODO: add validation that the folder can be found in the directory
 				text.onChange(async (value) => {
-					this.settings.foldersToEncrypt[idx] = value;
-					await this.plugin.saveSettings();
+					const validator = new FolderValidator();
+					try {
+						validator.validate(value);
+						this.settings.foldersToEncrypt[idx] = value;
+						text.inputEl.classList.remove('error');
+						await this.plugin.saveSettings();
+					} catch (e) {
+						if (e instanceof ValidationError) {
+							_log(e.message);
+							text.inputEl.classList.add('error');
+						}
+					}
 				})
 			}, async () => {
 				this.settings.foldersToEncrypt = [

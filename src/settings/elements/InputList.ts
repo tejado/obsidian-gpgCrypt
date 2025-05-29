@@ -1,4 +1,5 @@
 import { ButtonComponent, Setting, TextComponent } from "obsidian"
+import { IValidator } from "../validators/IValidator";
 
 export class InputListSetting extends Setting {
 
