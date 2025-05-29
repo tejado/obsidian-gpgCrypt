@@ -60,15 +60,44 @@ export class SettingsTab extends PluginSettingTab {
 			});
 
 		//TODO: disable this (gray it out) if `this.settings.encryptAll` is true
+
 		const encryptFolders = new InputListSetting(this.containerEl)
 			.setName("Encrypt Folders")
 			.setDesc("TODO: Think of a description")
 			.addButton((button => {
 				button.setButtonText("Add Folder")
-				button.onClick(() => encryptFolders.addInput((text) => { }))
+				button.onClick(() => {
+					let idx = 0;
+					if (this.settings.foldersToEncrypt) {
+						idx = this.settings.foldersToEncrypt.length;
+						this.settings.foldersToEncrypt.push("");
+					} else {
+						this.settings.foldersToEncrypt = [""];
+					}
+					addFolderToSetting("", idx);
+				})
 			}))
 
+		const addFolderToSetting = (folder: string, idx: number) => {
+			encryptFolders.addInput((text) => {
+				text.setValue(folder);
+				//TODO: add validation that the folder can be found in the directory
+				text.onChange(async (value) => {
+					this.settings.foldersToEncrypt[idx] = value;
+					await this.plugin.saveSettings();
+				})
+			}, async () => {
+				this.settings.foldersToEncrypt = [
+					...this.settings?.foldersToEncrypt?.slice(0, idx),
+					...this.settings?.foldersToEncrypt?.slice(idx + 1)
+				]
+				await this.plugin.saveSettings();
+			});
+		};
 
+		this.settings.foldersToEncrypt?.forEach((folder, idx) => {
+			addFolderToSetting(folder, idx)
+		})
 
 		new Setting(this.containerEl)
 			.setName("Use .gpg file extension")

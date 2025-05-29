@@ -16,10 +16,11 @@ export class InputListSetting extends Setting {
 
 
 	/**
-		* @name addInput
+	* @name addInput
 	* @description Wrapper function that 
+	* @returns {@InputListSetting} this
 	*/
-	public addInput(callback: (text: TextComponent, onRemove?: () => void) => void): InputListSetting {
+	public addInput(callback: (text: TextComponent) => void, onRemove?: () => void): InputListSetting {
 
 		const inputContainer = this.inputListContainerEl.createDiv({ cls: 'flex input-gap' })
 
@@ -28,8 +29,8 @@ export class InputListSetting extends Setting {
 		const buttonElement = new ButtonComponent(inputContainer).setButtonText("Remove");
 
 		buttonElement.onClick(() => {
+			onRemove?.()
 			//delete textelement on change setting.
-			textElement.setValue("");
 			textElement.inputEl.remove();
 			buttonElement.buttonEl.remove();
 		})
