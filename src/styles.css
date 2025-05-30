@@ -1,0 +1,56 @@
+.flex {
+	display: flex;
+}
+
+.column {
+	flex-direction: column;
+}
+
+.input-gap {
+	gap: 16px;
+	width: 100%;
+	justify-content: space-between;
+	align-items: stretch;
+	padding: 0 0.75em;
+}
+
+.input-gap input {
+	width: 100%;
+}
+
+.list-input {
+	gap: 4px;
+	width: 100%;
+}
+
+.setting-list-item {
+	gap: 12px;
+}
+
+.inputlist-container {
+	width: 100%;
+	margin-inline-end: unset !important;
+}
+
+.errorful-input-container {
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
+	gap: 2px;
+	width: 100%;
+}
+
+.error-text {
+	text-align: right;
+	font-weight: 300;
+	font-size: .85em;
+}
+
+.errorful-input-container input {
+	width: 100%;
+}
+
+.errorful-input-container input.error {
+	opacity: .8;
+	border-color: var(--text-error) !important;
+}
