@@ -9,5 +9,5 @@ export class ValidationError extends Error {
 
 export interface IValidator<T> {
 	//should throw {@ValidationError}
-	validate(object: T): void
+	validate(object: T): IValidator<T>
 } 

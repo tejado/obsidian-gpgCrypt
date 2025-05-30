@@ -1,4 +1,4 @@
-import { Notice, Platform, Plugin, DataWriteOptions, TFile, normalizePath, setIcon, App } from "obsidian";
+import { Notice, Platform, Plugin, DataWriteOptions, TFile, normalizePath, setIcon, App, TAbstractFile, TFolder } from "obsidian";
 
 import { FileRecovery, Settings } from "./settings/Settings";
 import { SettingsTab } from "./settings/SettingsTab";
@@ -12,6 +12,8 @@ import PassphraseModal from "./modals/PassphraseModal";
 import GenerateKeypairModal from "./modals/GenerateKeypairModal";
 import WelcomeModal from "./modals/WelcomeModal";
 import WrapperDecryptModal from "./modals/WrapperDecryptModal";
+import { FolderInSettingValidator } from "./settings/validators/ValidateFolderIsInSettings";
+import { ValidationError } from "./settings/validators/IValidator";
 
 
 // The duration of Notice alerts in milliseconds
@@ -183,6 +185,33 @@ export default class GpgPlugin extends Plugin {
 		// register gpg files as markdown
 		this.registerExtensions(["gpg"], "markdown");
 
+		//folder menu
+		this.registerEvent(
+			this.app.workspace.on('file-menu', async (menu, path) => {
+				try {
+
+					new FolderInSettingValidator(this.settings).validate(path.path)
+
+					if ('extension' in path) return;
+					path = path as TFolder
+
+					menu.addItem((item) => {
+						item.setTitle("Encrypt entire folder")
+							.setIcon("lock")
+							.onClick(async () => {
+								this.encryptAllFilesInPath(path as TFolder)
+							});
+					});
+				} catch (e) {
+					if (e instanceof ValidationError) {
+						console.log(e, path.path);
+					} else {
+						new Notice(`Encrypt folder failed: ${e}`, NOTICE_DURATION_MS);
+					}
+				}
+			})
+		)
+
 		// file menu
 		this.registerEvent(
 			this.app.workspace.on("file-menu", async (menu, file) => {
@@ -270,6 +299,7 @@ export default class GpgPlugin extends Plugin {
 
 		const content = await this.originalRead(normalizedPath)
 		const isEncrypted = await this.gpgNative.isEncrypted(content);
+
 
 		// in case the file status is already marked as encrypted, we don't set it to plaintext
 		// so we get a warning in case of the next write
@@ -370,45 +400,57 @@ export default class GpgPlugin extends Plugin {
 	private async hookedAdapterWrite(normalizedPath: string, data: string, options?: DataWriteOptions | undefined): Promise<void> {
 		_log(`Hooked Adapter - write (${normalizedPath})`);
 
-		// skip encryption if its already encrypted
-		if (await this.gpgNative.isEncrypted(data) === true) {
-			_log('Hooked Adapter - write - skip encryption as it is already encrypted')
-			this.encryptedFileStatus.set(normalizedPath, true);
-			return await this.originalWrite(normalizedPath, data, options)
-		}
-
-		let content: string | null = null;
-
 		try {
-			content = await this.originalRead(normalizedPath);
-		} catch (error) {
-			// ignore any errors here	
-			_log(`Hooked Adapter - write - originalRead error: ${error}`)
-		}
+			// skip encryption if its already encrypted
+			if (await this.gpgNative.isEncrypted(data) === true) {
+				_log('Hooked Adapter - write - skip encryption as it is already encrypted')
+				this.encryptedFileStatus.set(normalizedPath, true);
+				return await this.originalWrite(normalizedPath, data, options)
+			}
 
-		const isEncrypted = await this.gpgNative.isEncrypted(content);
+			let content: string | null = null;
 
-		try {
-			if (content != null && isEncrypted) {
-				[normalizedPath, data] = await this.renameAndEncrypt(normalizedPath, data);
-			} else if (this.encryptedFileStatus.has(normalizedPath) && this.encryptedFileStatus.get(normalizedPath) === true) {
-				const confirmChange = await new DialogModal(this.app).openAndAwait(
-					`WARNING: The file "${normalizedPath}" appears to have been modified outside of Obsidian and is no longer encrypted.`,
-					"Would you like to re-encrypt the file? If you choose 'No', the content will remain in plaintext (unencrypted)."
-				);
+			try {
+				content = await this.originalRead(normalizedPath);
+			} catch (error) {
+				// ignore any errors here	
+				_log(`Hooked Adapter - write - originalRead error: ${error}`)
+			}
 
-				if (confirmChange) {
+			const isEncrypted = await this.gpgNative.isEncrypted(content);
+
+
+			if (!this.settings.encryptAll)
+				new FolderInSettingValidator(this.settings).validate(normalizedPath);
+
+			try {
+				if (content != null && isEncrypted) {
 					[normalizedPath, data] = await this.renameAndEncrypt(normalizedPath, data);
-				} else {
-					this.encryptedFileStatus.set(normalizedPath, false);
-					new Notice(`File "${normalizedPath}" will be saved in plaintext (unencrypted).`, NOTICE_DURATION_MS)
+				} else if (this.encryptedFileStatus.has(normalizedPath) && this.encryptedFileStatus.get(normalizedPath) === true) {
+					const confirmChange = await new DialogModal(this.app).openAndAwait(
+						`WARNING: The file "${normalizedPath}" appears to have been modified outside of Obsidian and is no longer encrypted.`,
+						"Would you like to re-encrypt the file? If you choose 'No', the content will remain in plaintext (unencrypted)."
+					);
+
+					if (confirmChange) {
+						[normalizedPath, data] = await this.renameAndEncrypt(normalizedPath, data);
+					} else {
+						this.encryptedFileStatus.set(normalizedPath, false);
+						new Notice(`File "${normalizedPath}" will be saved in plaintext (unencrypted).`, NOTICE_DURATION_MS)
+					}
+				} else if (this.settings.encryptAll === true || this.settings.foldersToEncrypt.length > 0) {
+					[normalizedPath, data] = await this.renameAndEncrypt(normalizedPath, data);
 				}
-			} else if (this.settings.encryptAll === true) {
-				[normalizedPath, data] = await this.renameAndEncrypt(normalizedPath, data);
+			} catch (error) {
+				_log("An error occurred while reading and encrypting the file: ", error);
+				throw error;
 			}
 		} catch (error) {
-			_log("An error occurred while reading and encrypting the file: ", error);
-			throw error;
+			if (error instanceof ValidationError) {
+				_log(error);
+			} else {
+				throw error
+			}
 		}
 
 		return await this.originalWrite(normalizedPath, data, options)
@@ -699,6 +741,20 @@ export default class GpgPlugin extends Plugin {
 		return this.passphraseRequestPromise;
 	}
 
+	async encryptAllFilesInPath(path: TFolder) {
+		// recurisevly go through paths to encrypt all files. 
+		path.children.forEach(async child => {
+			if ('extension' in child) {
+				await this.persistentFileEncrypt(child as TFile);
+			} else {
+				//assuming its a folder
+				this.encryptAllFilesInPath(child as TFolder);
+			}
+
+		})
+
+	}
+
 	async persistentFileEncrypt(file: TFile) {
 		try {
 
@@ -871,6 +927,7 @@ export default class GpgPlugin extends Plugin {
 
 			encryptAll: false,
 			renameToGpg: false,
+			foldersToEncrypt: [],
 
 			fileRecovery: FileRecovery.ENCRYPTED,
 

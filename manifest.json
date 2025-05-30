@@ -6,5 +6,6 @@
 	"description": "Seamlessly encrypts your notes using GPG. Supports smartcards for enhanced security! Keep your information safe and accessible only to you.",
 	"author": "Tjado Mäcke",
 	"authorUrl": "https://github.com/tejado",
-	"css": "styles.css""isDesktopOnly": false
+	"css": "styles.css",
+	"isDesktopOnly": false
 }
