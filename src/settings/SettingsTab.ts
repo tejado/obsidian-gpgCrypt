@@ -62,11 +62,9 @@ export class SettingsTab extends PluginSettingTab {
 					});
 			});
 
-		//TODO: disable this (gray it out) if `this.settings.encryptAll` is true
-
 		const encryptFolders = new InputListSetting(this.containerEl)
 			.setName("Encrypt Folders")
-			.setDesc("TODO: Think of a description")
+			.setDesc("Specify folders whose notes should be encrypted when modified. Only notes inside these folders will be affected if 'Encrypt all notes' is disabled.")
 			.addButton((button => {
 				button.setButtonText("Add Folder")
 				button.onClick(() => {
@@ -84,7 +82,6 @@ export class SettingsTab extends PluginSettingTab {
 		const addFolderToSetting = (folder: string, idx: number) => {
 			encryptFolders.addInput((text) => {
 				text.setValue(folder);
-				//TODO: add validation that the folder can be found in the directory
 				text.onChange(async (value) => {
 					const validator = new FolderValidator();
 					try {
