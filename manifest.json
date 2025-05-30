@@ -1,7 +1,7 @@
 {
 	"id": "gpg-crypt",
 	"name": "gpgCrypt",
-	"version": "0.5.0",
+	"version": "0.6.0",
 	"minAppVersion": "1.7.7",
 	"description": "Seamlessly encrypts your notes using GPG. Supports smartcards for enhanced security! Keep your information safe and accessible only to you.",
 	"author": "Tjado Mäcke",
