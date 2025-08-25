@@ -12,6 +12,11 @@ import { FolderValidator } from "./validators/ValidateFolderPath";
 import { ValidationError } from "./validators/IValidator";
 import { _log } from "src/common/utils";
 
+interface GpgKeyInfo {
+  keyID: string;
+  userID: string;
+}
+
 export class SettingsTab extends PluginSettingTab {
 	app: App;
 	plugin: GpgPlugin;
@@ -453,7 +458,7 @@ export class SettingsTab extends PluginSettingTab {
 
 	private async refreshRecipientSetting() {
 		// Fetching public keys and updating the dropdown
-		const keys = await this.plugin.gpgWrapper.getPublicKeys();
+		const keys: GpgKeyInfo[] = await this.plugin.gpgWrapper.getPublicKeys();
 
 		// Clear recipient field
 		this.recipientSetting.clear();

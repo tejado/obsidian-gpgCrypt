@@ -244,6 +244,60 @@ export default class GpgPlugin extends Plugin {
 				}
 			})
 		);
+
+		this.addCommand({
+			id: 'gpg-encrypt-permanently',
+			name: 'GPG-Crypt: Encrypt file permanently',
+			checkCallback: (checking: boolean) => {
+				const activeFile = this.app.workspace.getActiveFile();
+				if (!activeFile) {
+					return false;
+				}
+
+				if (activeFile.extension !== "md" && activeFile.extension !== "gpg") {
+					return false;
+				}
+
+				const isEncrypted = this.encryptedFileStatus.get(activeFile.path);
+
+				if (isEncrypted === true) {
+					return false;
+				}
+
+				if (!checking) {
+					this.persistentFileEncrypt(activeFile);
+				}
+
+				return true;
+			},
+		});
+
+		this.addCommand({
+			id: 'gpg-decrypt-permanently',
+			name: 'GPG-Crypt: Decrypt file permanently',
+			checkCallback: (checking: boolean) => {
+				const activeFile = this.app.workspace.getActiveFile();
+				if (!activeFile) {
+					return false;
+				}
+
+				if (activeFile.extension !== "md" && activeFile.extension !== "gpg") {
+					return false;
+				}
+
+				const isEncrypted = this.encryptedFileStatus.get(activeFile.path);
+				
+				if (isEncrypted === false) {
+					return false;
+				}
+
+				if (!checking) {
+					this.persistentFileDecrypt(activeFile);
+				}
+
+				return true;
+			},
+		});
 	}
 
 	override async onunload(): Promise<void> {
