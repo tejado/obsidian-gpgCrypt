@@ -1,4 +1,4 @@
-import { Notice, Platform, Plugin, DataWriteOptions, TFile, normalizePath, setIcon } from "obsidian";
+import { Notice, Platform, Plugin, DataWriteOptions, TFile, normalizePath, setIcon, App, TAbstractFile, TFolder } from "obsidian";
 
 import { FileRecovery, Settings } from "./settings/Settings";
 import { SettingsTab } from "./settings/SettingsTab";
@@ -12,6 +12,8 @@ import PassphraseModal from "./modals/PassphraseModal";
 import GenerateKeypairModal from "./modals/GenerateKeypairModal";
 import WelcomeModal from "./modals/WelcomeModal";
 import WrapperDecryptModal from "./modals/WrapperDecryptModal";
+import { FolderInSettingValidator } from "./settings/validators/ValidateFolderIsInSettings";
+import { ValidationError } from "./settings/validators/IValidator";
 
 
 // The duration of Notice alerts in milliseconds
@@ -24,6 +26,8 @@ export default class GpgPlugin extends Plugin {
 	public gpgNative: BackendNative
 	public gpgWrapper: BackendWrapper
 	public cache: BackendPassphraseCache;
+
+	public static APP: App;
 
 	// Save file state (encrypted or not) to check for any
 	// inconsistencies between this and the file on disk
@@ -54,12 +58,15 @@ export default class GpgPlugin extends Plugin {
 	private originalFileRecoveryOnFileChangeFunction: (file: TFile) => Promise<unknown>;
 	private originalFileRecoveryForceAddFunction: (normalizedPath: string, data: string) => Promise<unknown>;
 	private hookedVaultCachedReadRef: (file: TFile) => Promise<string>;
-	private hookedFileRecoveryOnFileChangeRef:(file: TFile) => Promise<unknown>;
+	private hookedFileRecoveryOnFileChangeRef: (file: TFile) => Promise<unknown>;
 	private hookedFileRecoveryForceAddRef: (normalizedPath: string, data: string) => Promise<unknown>;
 
 	async onload() {
 		//@ts-ignore
 		_log("gpgCrypt DEBUG Build:", (process.env.DEBUG === true));
+
+		//init global App Instance
+		GpgPlugin.APP = this.app;
 
 		// init backends
 		this.gpgNative = new BackendNative();
@@ -67,18 +74,18 @@ export default class GpgPlugin extends Plugin {
 		this.cache = BackendPassphraseCache.create(this);
 
 		// load settings
-		await this.loadSettings();	
-		
+		await this.loadSettings();
+
 		this.addSettingTab(new SettingsTab(this.app, this, this.settings));
 
 		// load the keys when the layout is ready
-		this.app.workspace.onLayoutReady( async () => {
+		this.app.workspace.onLayoutReady(async () => {
 			if (this.settings.firstLoad === true) {
 				this.settings.firstLoad = false;
 				this.saveSettings();
-	
+
 				const action = await new WelcomeModal(this.app, true).openAndAwait();
-	
+
 				if (action === "gen-key") {
 					this.generateKeypair();
 				} else if (action === "open-settings") {
@@ -102,7 +109,7 @@ export default class GpgPlugin extends Plugin {
 						await this.gpgNative.testPassphrase(passphrase);
 
 						// only cache password when the passphrase test was successful
-						if (passphrase) { 
+						if (passphrase) {
 							this.cache.setPassphrase(passphrase);
 							new Notice(`Private key successfully unlocked. It will remain unlocked for ${this.settings.passphraseTimeout} seconds.`)
 							break;
@@ -111,10 +118,10 @@ export default class GpgPlugin extends Plugin {
 						_log(error);
 						new Notice(error.message);
 
-						if(!error.message.includes("Incorrect key passphrase")) {
+						if (!error.message.includes("Incorrect key passphrase")) {
 							break;
 						}
-					} 
+					}
 				}
 			}
 		});
@@ -148,7 +155,7 @@ export default class GpgPlugin extends Plugin {
 		this.hookedAdapterWriteRef = this.hookedAdapterWrite.bind(this);
 		this.hookedAdapterProcessRef = this.hookedAdapterProcess.bind(this);
 		this.hookedVaultCachedReadRef = this.hookedVaultCachedRead.bind(this);
-		this.hookedFileRecoveryOnFileChangeRef  = this.hookedFileRecoveryOnFileChange.bind(this);
+		this.hookedFileRecoveryOnFileChangeRef = this.hookedFileRecoveryOnFileChange.bind(this);
 		this.hookedFileRecoveryForceAddRef = this.hookedFileRecoveryForceAdd.bind(this);
 		this.app.vault.adapter.read = this.hookedAdapterReadRef;
 		this.app.vault.adapter.readBinary = this.hookedAdapterReadBinaryRef;
@@ -177,6 +184,33 @@ export default class GpgPlugin extends Plugin {
 
 		// register gpg files as markdown
 		this.registerExtensions(["gpg"], "markdown");
+
+		//folder menu
+		this.registerEvent(
+			this.app.workspace.on('file-menu', async (menu, path) => {
+				try {
+
+					new FolderInSettingValidator(this.settings).validate(path.path)
+
+					if ('extension' in path) return;
+					path = path as TFolder
+
+					menu.addItem((item) => {
+						item.setTitle("Encrypt entire folder")
+							.setIcon("lock")
+							.onClick(async () => {
+								this.encryptAllFilesInPath(path as TFolder)
+							});
+					});
+				} catch (e) {
+					if (e instanceof ValidationError) {
+						console.log(e, path.path);
+					} else {
+						new Notice(`Encrypt folder failed: ${e}`, NOTICE_DURATION_MS);
+					}
+				}
+			})
+		)
 
 		// file menu
 		this.registerEvent(
@@ -207,7 +241,7 @@ export default class GpgPlugin extends Plugin {
 								this.persistentFileDecrypt(tFile);
 							});
 					});
-				} 
+				}
 			})
 		);
 	}
@@ -223,10 +257,10 @@ export default class GpgPlugin extends Plugin {
 			this.app.vault.adapter.process != this.hookedAdapterProcessRef ||
 			this.app.vault.cachedRead != this.hookedVaultCachedReadRef ||
 			//@ts-ignore
-			this.app.internalPlugins.plugins["file-recovery"].instance.onFileChanged != this.hookedFileRecoveryOnFileChangeRef || 
+			this.app.internalPlugins.plugins["file-recovery"].instance.onFileChanged != this.hookedFileRecoveryOnFileChangeRef ||
 			//@ts-ignore
 			this.app.internalPlugins.plugins["file-recovery"].instance.forceAdd != this.hookedFileRecoveryForceAddRef
-		){
+		) {
 			await new DialogModal(this.app).openAndAwait(
 				"Inconsistent plugin unload: please restart Obsidian to avoid any issues!",
 				undefined,
@@ -240,7 +274,7 @@ export default class GpgPlugin extends Plugin {
 		this.app.vault.adapter.write = this.originalAdapterWriteFunction;
 		this.app.vault.adapter.process = this.originalAdapterProcessFunction;
 		this.app.vault.cachedRead = this.originalVaultCachedReadFunction;
-		
+
 		// restore file-recovery events and functions.
 		//@ts-ignore
 		this.app.vault.off('modify', this.app.internalPlugins.plugins["file-recovery"].instance.onFileChanged);
@@ -266,14 +300,15 @@ export default class GpgPlugin extends Plugin {
 		const content = await this.originalRead(normalizedPath)
 		const isEncrypted = await this.gpgNative.isEncrypted(content);
 
+
 		// in case the file status is already marked as encrypted, we don't set it to plaintext
 		// so we get a warning in case of the next write
 		if (!this.encryptedFileStatus.has(normalizedPath) || this.encryptedFileStatus.get(normalizedPath) !== true) {
 			this.encryptedFileStatus.set(normalizedPath, isEncrypted);
 		}
-		
-		if (!isEncrypted) { 
-			return content; 
+
+		if (!isEncrypted) {
+			return content;
 		}
 
 		// As Obsidian is doing multiple read calls for one note opening, it doesnt directly output
@@ -288,14 +323,14 @@ export default class GpgPlugin extends Plugin {
 			return this.decryptionCache.get(content)!;
 		}
 
-		this.decryptionCache.set(content,  new Promise(async (resolve, reject) => {
-			let errorOccurred = false; 
-			try {	
+		this.decryptionCache.set(content, new Promise(async (resolve, reject) => {
+			let errorOccurred = false;
+			try {
 				//await new Promise(res => setTimeout(res, 10000))
 				resolve(await this.decrypt(normalizedPath, content));
 			} catch (error) {
 				errorOccurred = true;
-				reject (error)
+				reject(error)
 			} finally {
 				// Reset for the next time we need an external decrypt.
 				// If cache option is set and no error occured, the entry is kept for faster note reopening
@@ -305,7 +340,7 @@ export default class GpgPlugin extends Plugin {
 				}
 			}
 		}));
-		
+
 		return this.decryptionCache.get(content)!;
 	}
 
@@ -362,50 +397,62 @@ export default class GpgPlugin extends Plugin {
 	}
 
 	// Gets executed when Obsidian writes a file
-	private async hookedAdapterWrite(normalizedPath: string, data: string, options?: DataWriteOptions | undefined): Promise<void>  {
+	private async hookedAdapterWrite(normalizedPath: string, data: string, options?: DataWriteOptions | undefined): Promise<void> {
 		_log(`Hooked Adapter - write (${normalizedPath})`);
 
-		// skip encryption if its already encrypted
-		if (await this.gpgNative.isEncrypted(data) === true) {
-			_log('Hooked Adapter - write - skip encryption as it is already encrypted')
-			this.encryptedFileStatus.set(normalizedPath, true);
-			return await this.originalWrite(normalizedPath, data, options)
-		}
-
-		let content: string | null = null;
-
 		try {
-			content = await this.originalRead(normalizedPath);
-		} catch (error) {
-			// ignore any errors here	
-			_log(`Hooked Adapter - write - originalRead error: ${error}`)
-		}
-		
-		const isEncrypted = await this.gpgNative.isEncrypted(content);
+			// skip encryption if its already encrypted
+			if (await this.gpgNative.isEncrypted(data) === true) {
+				_log('Hooked Adapter - write - skip encryption as it is already encrypted')
+				this.encryptedFileStatus.set(normalizedPath, true);
+				return await this.originalWrite(normalizedPath, data, options)
+			}
 
-		try {
-			if (content != null && isEncrypted) {
-				[normalizedPath, data] = await this.renameAndEncrypt(normalizedPath, data);
-			} else if (this.encryptedFileStatus.has(normalizedPath) && this.encryptedFileStatus.get(normalizedPath) === true) {
-				const confirmChange = await new DialogModal(this.app).openAndAwait(
-					`WARNING: The file "${normalizedPath}" appears to have been modified outside of Obsidian and is no longer encrypted.`,
-					"Would you like to re-encrypt the file? If you choose 'No', the content will remain in plaintext (unencrypted)."
-				);
+			let content: string | null = null;
 
-				if (confirmChange) {
+			try {
+				content = await this.originalRead(normalizedPath);
+			} catch (error) {
+				// ignore any errors here	
+				_log(`Hooked Adapter - write - originalRead error: ${error}`)
+			}
+
+			const isEncrypted = await this.gpgNative.isEncrypted(content);
+
+
+			if (!this.settings.encryptAll)
+				new FolderInSettingValidator(this.settings).validate(normalizedPath);
+
+			try {
+				if (content != null && isEncrypted) {
 					[normalizedPath, data] = await this.renameAndEncrypt(normalizedPath, data);
-				} else {
-					this.encryptedFileStatus.set(normalizedPath, false);
-					new Notice(`File "${normalizedPath}" will be saved in plaintext (unencrypted).`, NOTICE_DURATION_MS)
+				} else if (this.encryptedFileStatus.has(normalizedPath) && this.encryptedFileStatus.get(normalizedPath) === true) {
+					const confirmChange = await new DialogModal(this.app).openAndAwait(
+						`WARNING: The file "${normalizedPath}" appears to have been modified outside of Obsidian and is no longer encrypted.`,
+						"Would you like to re-encrypt the file? If you choose 'No', the content will remain in plaintext (unencrypted)."
+					);
+
+					if (confirmChange) {
+						[normalizedPath, data] = await this.renameAndEncrypt(normalizedPath, data);
+					} else {
+						this.encryptedFileStatus.set(normalizedPath, false);
+						new Notice(`File "${normalizedPath}" will be saved in plaintext (unencrypted).`, NOTICE_DURATION_MS)
+					}
+				} else if (this.settings.encryptAll === true || this.settings.foldersToEncrypt.length > 0) {
+					[normalizedPath, data] = await this.renameAndEncrypt(normalizedPath, data);
 				}
-			} else if (this.settings.encryptAll === true) {
-				[normalizedPath, data] = await this.renameAndEncrypt(normalizedPath, data);
+			} catch (error) {
+				_log("An error occurred while reading and encrypting the file: ", error);
+				throw error;
 			}
 		} catch (error) {
-			_log("An error occurred while reading and encrypting the file: ", error);
-			throw error;
+			if (error instanceof ValidationError) {
+				_log(error);
+			} else {
+				throw error
+			}
 		}
-		
+
 		return await this.originalWrite(normalizedPath, data, options)
 	}
 
@@ -417,13 +464,13 @@ export default class GpgPlugin extends Plugin {
 
 		// if the file was not read before by Obsidian
 		// we have to get the content (unfortunately) to know if its encrypted or not.
-		if(!this.encryptedFileStatus.has(normalizedPath)) {
+		if (!this.encryptedFileStatus.has(normalizedPath)) {
 			content = await this.getFileContent(normalizedPath);
 		}
 
 		// if its encrypted, we change the callback to return the encrypted result
-		if(this.encryptedFileStatus.get(normalizedPath) === true) {
-			if(content === null) {
+		if (this.encryptedFileStatus.get(normalizedPath) === true) {
+			if (content === null) {
 				content = await this.getFileContent(normalizedPath) || "";
 			}
 
@@ -454,7 +501,7 @@ export default class GpgPlugin extends Plugin {
 			}
 		}
 
-		return content; 
+		return content;
 	}
 
 	private async hookedFileRecoveryOnFileChange(file: TFile) {
@@ -473,7 +520,7 @@ export default class GpgPlugin extends Plugin {
 		if (encryptedFileStatus === undefined) {
 			const content = await this.app.vault.read(file);
 			encryptedFileStatus = this.encryptedFileStatus.get(file.path) === true ||
-									(encryptedFileStatus === undefined && await this.gpgNative.isEncrypted(content));
+				(encryptedFileStatus === undefined && await this.gpgNative.isEncrypted(content));
 		}
 
 		if (encryptedFileStatus === true && this.settings.fileRecovery == FileRecovery.SKIP) {
@@ -487,21 +534,21 @@ export default class GpgPlugin extends Plugin {
 		}
 
 		const output = await this.originalFileRecoveryOnFileChange(file);
-		
+
 		// unset file marker
 		//@ts-ignore
 		file._gpgCryptEncryptCache = null;
-		
+
 		return output;
 	}
 
 	private async hookedFileRecoveryForceAdd(normalizedPath: string, data: string) {
 		_log(`Hooked File-Recovery forceAdd (${normalizedPath})`);
-		
+
 		//@ts-ignore
 		return this.originalFileRecoveryForceAdd(normalizedPath, data);
 	}
-	
+
 	async originalRead(normalizedPath: string) {
 		return this.originalAdapterReadFunction.call(this.app.vault.adapter, normalizedPath);
 	}
@@ -550,7 +597,7 @@ export default class GpgPlugin extends Plugin {
 				const msg = `Rename to gpg file extension failed: ${error}`
 				_log(msg);
 				new Notice(msg, NOTICE_DURATION_MS);
-			}	
+			}
 		}
 
 		data = await this.encrypt(data);
@@ -562,14 +609,14 @@ export default class GpgPlugin extends Plugin {
 	async encrypt(plaintext: string): Promise<string> {
 		if (this.settings.backend == Backend.NATIVE) {
 			_log('encrypt - native')
-			if(!this.gpgNative.hasPublicKey()) {
+			if (!this.gpgNative.hasPublicKey()) {
 				throw new Error("No public key for encryption configured!");
 			}
 
-			if(this.settings.resetPassphraseTimeoutOnWrite) {
+			if (this.settings.resetPassphraseTimeoutOnWrite) {
 				_log('encrypt: reset passphrase timeout')
 				this.cache.resetTimeout();
-			} 
+			}
 
 			return this.gpgNative.encrypt(plaintext);
 		} else {
@@ -581,19 +628,19 @@ export default class GpgPlugin extends Plugin {
 			const args: string[] = ["--armor"];
 
 			// To avoid any command injection here, we check if it looks like a key ID
-			if(this.settings.backendWrapper.recipient && isGpgKey(this.settings.backendWrapper.recipient)) {
+			if (this.settings.backendWrapper.recipient && isGpgKey(this.settings.backendWrapper.recipient)) {
 				args.push("--recipient", this.settings.backendWrapper.recipient)
 			} else {
 				throw new Error("No valid recipient configured.");
 			}
 
-			if(this.settings.backendWrapper.compression === true) {
+			if (this.settings.backendWrapper.compression === true) {
 				args.push("--compression-algo", "zlib");
 			} else {
 				args.push("--compression-algo", "none");
 			}
 
-			if(this.settings.backendWrapper.trustModelAlways) {
+			if (this.settings.backendWrapper.trustModelAlways) {
 				args.push("--trust-model", "always");
 			}
 
@@ -602,7 +649,7 @@ export default class GpgPlugin extends Plugin {
 	}
 
 	async decrypt(fileName: string, encryptedText: string): Promise<string> {
-	
+
 		if (this.settings.backend == Backend.WRAPPER) {
 			if (Platform.isMobile) {
 				throw new Error("GnuPG CLI Wrapper mode is not supported on mobile devices.");
@@ -610,18 +657,18 @@ export default class GpgPlugin extends Plugin {
 
 			const modal = new WrapperDecryptModal(this.app, fileName);
 
-			try {	
+			try {
 				if (this.settings.backendWrapper.showDecryptModal) {
 					modal.open();
 				}
 
 				const args: string[] = [];
-				if(this.settings.backendWrapper.trustModelAlways) {
+				if (this.settings.backendWrapper.trustModelAlways) {
 					args.push("--trust-model", "always");
 				}
 
 				// Init the decryption process to get the kill function
-				const decryption =  this.gpgWrapper.initDecrypt(encryptedText);
+				const decryption = this.gpgWrapper.initDecrypt(encryptedText);
 
 				// Set the onCancel function in the moda, in case the user inititates the cancellation of the decryption process
 				if (this.settings.backendWrapper.showDecryptModal) {
@@ -640,7 +687,7 @@ export default class GpgPlugin extends Plugin {
 			}
 		}
 
-		if(!this.gpgNative.hasPrivateKey()) {
+		if (!this.gpgNative.hasPrivateKey()) {
 			await this.loadKeypair();
 		}
 
@@ -648,7 +695,7 @@ export default class GpgPlugin extends Plugin {
 		// eslint-disable-next-line no-constant-condition
 		while (true) {
 			try {
-				if(this.gpgNative.isPrivateKeyEncrypted()) {
+				if (this.gpgNative.isPrivateKeyEncrypted()) {
 					passphrase = this.cache.getPassphrase();
 					if (!passphrase) {
 						passphrase = await this.requestPassphraseModal();
@@ -658,7 +705,7 @@ export default class GpgPlugin extends Plugin {
 				const plainntext = await this.gpgNative.decrypt(encryptedText, passphrase);
 
 				// only cache password when the decryption was successul and a passphrase was used
-				if (passphrase) { 
+				if (passphrase) {
 					this.cache.setPassphrase(passphrase);
 				}
 
@@ -666,7 +713,7 @@ export default class GpgPlugin extends Plugin {
 			} catch (error) {
 				_log(error);
 				new Notice(error.message);
-				if(!error.message.includes("Incorrect key passphrase")) {
+				if (!error.message.includes("Incorrect key passphrase")) {
 					throw error;
 				}
 			}
@@ -678,7 +725,7 @@ export default class GpgPlugin extends Plugin {
 		if (this.passphraseRequestPromise) {
 			return this.passphraseRequestPromise;
 		}
-		
+
 		this.passphraseRequestPromise = new Promise(async (resolve, reject) => {
 			try {
 				const passphrase = await new PassphraseModal(this.app).openAndAwait(` for private key "${this.settings.backendNative.privateKeyPath}"`);
@@ -690,8 +737,22 @@ export default class GpgPlugin extends Plugin {
 				this.passphraseRequestPromise = null;
 			}
 		});
-		
+
 		return this.passphraseRequestPromise;
+	}
+
+	async encryptAllFilesInPath(path: TFolder) {
+		// recurisevly go through paths to encrypt all files. 
+		path.children.forEach(async child => {
+			if ('extension' in child) {
+				await this.persistentFileEncrypt(child as TFile);
+			} else {
+				//assuming its a folder
+				this.encryptAllFilesInPath(child as TFolder);
+			}
+
+		})
+
 	}
 
 	async persistentFileEncrypt(file: TFile) {
@@ -716,9 +777,9 @@ export default class GpgPlugin extends Plugin {
 					file = this.app.vault.getAbstractFileByPath(normalizePath(newPath)) as TFile;
 				} catch (error) {
 					throw Error(`Encryption failed as note could not be renamed to gpg file extension: ${error}`);
-				}	
+				}
 			}
-			
+
 			const contentEncrypted = await this.encrypt(content);
 			await this.originalWrite(file.path, contentEncrypted);
 
@@ -728,7 +789,7 @@ export default class GpgPlugin extends Plugin {
 		} catch (error) {
 			_log(error);
 			new Notice(error, NOTICE_DURATION_MS);
-		}	
+		}
 	}
 
 	// Decrypt the file in-place persistently when the user manually triggers the decryption
@@ -753,7 +814,7 @@ export default class GpgPlugin extends Plugin {
 					file = this.app.vault.getAbstractFileByPath(normalizePath(newPath)) as TFile;
 				} catch (error) {
 					throw Error(`Decryption failed as note could not be renamed to markdown file extension: ${error}`);
-				}	
+				}
 			}
 
 			await this.originalWrite(file.path, content);
@@ -770,7 +831,7 @@ export default class GpgPlugin extends Plugin {
 	// Indicate the file state in the status bar
 	private statusBarRefresh(file: TFile | null) {
 		const activeFile = this.app.workspace.getActiveFile();
-		if(file !== activeFile) {
+		if (file !== activeFile) {
 			return;
 		}
 
@@ -788,7 +849,7 @@ export default class GpgPlugin extends Plugin {
 
 	async getFileContent(path: string): Promise<string | null> {
 		const file = this.app.vault.getAbstractFileByPath(normalizePath(path));
-	
+
 		if (file instanceof TFile) {
 			return await this.app.vault.read(file);
 		}
@@ -798,7 +859,7 @@ export default class GpgPlugin extends Plugin {
 
 	async getFileContentExternal(path: string): Promise<string | null> {
 		const file = this.app.vault.getAbstractFileByPath(normalizePath(path));
-	
+
 		if (file instanceof TFile) {
 			return await this.app.vault.read(file);
 		}
@@ -810,14 +871,14 @@ export default class GpgPlugin extends Plugin {
 
 			const response = await fetch(resourcePath);
 			const content = await response.text();
-			
-			if (content.length == 0){
+
+			if (content.length == 0) {
 				return null;
 			}
 
 			_log(`getFileContentExternal content: ${content}`);
 			return content;
-		} catch(error) {
+		} catch (error) {
 			_log(error);
 			return null;
 		}
@@ -830,12 +891,12 @@ export default class GpgPlugin extends Plugin {
 			if (!result.publicKey || !result.privateKey) {
 				throw new Error("Key file names must not be empty");
 			}
-		
+
 			// Check if the public key file exists
 			if (
 				await this.getFileContent(result.publicKey) !== null ||
 				await this.getFileContent(result.privateKey) !== null
-			){
+			) {
 				throw new Error("Key files are already existing: aborting key pair generation!");
 			}
 
@@ -866,6 +927,7 @@ export default class GpgPlugin extends Plugin {
 
 			encryptAll: false,
 			renameToGpg: false,
+			foldersToEncrypt: [],
 
 			fileRecovery: FileRecovery.ENCRYPTED,
 
@@ -876,7 +938,7 @@ export default class GpgPlugin extends Plugin {
 			backendNative: {
 				publicKeyPath: "public.asc",
 				privateKeyPath: "private.asc"
-			}, 
+			},
 
 			backendWrapper: {
 				executable: "gpg",
@@ -899,7 +961,7 @@ export default class GpgPlugin extends Plugin {
 		if (Platform.isMobile) {
 			this.settings.backend = Backend.NATIVE;
 		}
-		
+
 		// ensure that the passphraseTimeout is minimum 10s
 		if (this.settings.passphraseTimeout < 10) {
 			this.settings.passphraseTimeout = 10;
