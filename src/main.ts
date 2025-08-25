@@ -247,7 +247,7 @@ export default class GpgPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'gpg-encrypt-permanently',
-			name: 'GPG-Crypt: Encrypt file permanently',
+			name: 'Encrypt file permanently',
 			checkCallback: (checking: boolean) => {
 				const activeFile = this.app.workspace.getActiveFile();
 				if (!activeFile) {
@@ -274,7 +274,7 @@ export default class GpgPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'gpg-decrypt-permanently',
-			name: 'GPG-Crypt: Decrypt file permanently',
+			name: 'Decrypt file permanently',
 			checkCallback: (checking: boolean) => {
 				const activeFile = this.app.workspace.getActiveFile();
 				if (!activeFile) {
