@@ -473,9 +473,7 @@ export default class GpgPlugin extends Plugin {
 
 			const isEncrypted = await this.gpgNative.isEncrypted(content);
 
-
-			if (!this.settings.encryptAll)
-				new FolderInSettingValidator(this.settings).validate(normalizedPath);
+			new FolderInSettingValidator(this.settings).validate(normalizedPath);
 
 			try {
 				if (content != null && isEncrypted) {
