@@ -8,6 +8,10 @@ export class FolderInSettingValidator implements IValidator<string> {
 	validate(filePath: string) {
 		const normalizedFilePath = normalizePath(filePath);
 
+		if (this.settings.encryptAll) {
+			return this;
+		}
+
 		//if the paths are just equal
 		if (
 			this.settings.foldersToEncrypt?.some(
@@ -26,8 +30,7 @@ export class FolderInSettingValidator implements IValidator<string> {
 
 		if (!isInAllowedFolder) {
 			throw new ValidationError(
-				"FolderInSettingValidator",
-				"This folder isn't in your path.",
+				"FolderInSettingValidator", "This folder isn't in your path.",
 				filePath + " folder not in path, ignoring."
 			);
 		}
