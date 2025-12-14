@@ -6,9 +6,12 @@ export class FolderInSettingValidator implements IValidator<string> {
 
 	constructor(private readonly settings: Settings) { }
 
-
 	validate(filePath: string) {
 		const normalizedFilePath = path.resolve(filePath);
+
+		if (this.settings.encryptAll) {
+			return this;
+		}
 
 		//if the paths are just equal
 		if (this.settings.foldersToEncrypt?.some(folder => folder === filePath)) {
@@ -26,6 +29,5 @@ export class FolderInSettingValidator implements IValidator<string> {
 
 		return this;
 	}
-
 
 } 
