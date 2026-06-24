@@ -412,8 +412,10 @@ export default class GpgPlugin extends Plugin {
 		if (!this.encryptedFileStatus.has(normalizedPath) || this.encryptedFileStatus.get(normalizedPath) !== true) {
 			this.encryptedFileStatus.set(normalizedPath, isEncrypted);
 		}
-
-		if (!isEncrypted || !this.settings.compatibilityMode) {
+		
+		// Worker Obsidian uses readBinary to parse metadata 
+		// which is necessary for showing headers and so on.
+		if (!isEncrypted || !this.settings.showOutlineHeadings) {
 			return contentArray;
 		}
 
@@ -551,6 +553,38 @@ export default class GpgPlugin extends Plugin {
 			if (await this.gpgNative.isEncrypted(content) === false) {
 				return await this.encrypt(content);
 			}
+
+			return content;
+		}
+
+		// vault.cachedRead maintains its own internal content cache that is
+		// populated at vault startup — BEFORE the plugin (and its adapter.read hook)
+		// is loaded. As a result, originalVaultCachedRead may return stale
+		// encrypted content even though adapter.read is already hooked.
+		// Consumers such as MetadataCache call cachedRead, so they would index
+		// the raw PGP ciphertext and headings would never appear in the sidebar.
+		// Fix: detect encrypted content and decrypt it here, reusing the same
+		// decryptionCache that hookedAdapterRead uses to coalesce concurrent calls.
+		if (await this.gpgNative.isEncrypted(content)) {
+			if (this.decryptionCache.has(content)) {
+				return this.decryptionCache.get(content)!;
+			}
+
+			this.decryptionCache.set(content, new Promise(async (resolve, reject) => {
+				let errorOccurred = false;
+				try {
+					resolve(await this.decrypt(file.path, content));
+				} catch (error) {
+					errorOccurred = true;
+					reject(error);
+				} finally {
+					if (errorOccurred || !this.settings.backendWrapper.cache) {
+						setTimeout(() => { _log(`Delete decryption cache (cachedRead) for ${file.path}`); this.decryptionCache.delete(content); }, 500);
+					}
+				}
+			}));
+
+			return this.decryptionCache.get(content)!;
 		}
 
 		return content;
@@ -1004,6 +1038,8 @@ export default class GpgPlugin extends Plugin {
 			askPassphraseOnStartup: false,
 			passphraseTimeout: 300,
 			resetPassphraseTimeoutOnWrite: false,
+
+			showOutlineHeadings: true,
 		}
 
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
