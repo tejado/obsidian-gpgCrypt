@@ -156,6 +156,17 @@ export class SettingsTab extends PluginSettingTab {
 		const warningEl = compatibilityModeSetting.descEl.createSpan({ cls: 'mod-warning' });
 		warningEl.innerText = "Warning: this exposes plaintext headings and file structure on disk.";
 
+		new Setting(this.containerEl)
+			.setName("Show headings in Outline panel")
+			.setDesc("When enabled, headings from encrypted notes are indexed in Obsidian's MetadataCache after keys are loaded, making them visible in the Outline panel. Disable this if you experience indexing issues.")
+			.addToggle(toggle => {
+				toggle
+					.setValue(this.settings.showOutlineHeadings)
+					.onChange(async (value) => {
+						this.settings.showOutlineHeadings = value;
+						await this.plugin.saveSettings();
+					});
+			});
 
 		new Setting(this.containerEl)
 			.setHeading()
