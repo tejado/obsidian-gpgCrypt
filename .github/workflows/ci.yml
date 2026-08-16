@@ -88,7 +88,9 @@ jobs:
       - name: Prepare isolated GNUPGHOME with the TEST-ONLY fixture keys
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then
-            export GNUPGHOME="C:/gnupg-ci"          # must stay < 80 chars on Windows
+            # Git for Windows' gpg is an MSYS build: it needs the POSIX spelling (C:/… is taken as a
+            # RELATIVE path → "no writable keyring found"); keep it short (< 80 chars, gpg-agent limit)
+            export GNUPGHOME="/c/gnupg-ci"
           else
             export GNUPGHOME="/tmp/gnupghome-ci"    # short: unix socket path limit (104 on macOS)
           fi
@@ -153,8 +155,17 @@ jobs:
       # Resolve the concrete Obsidian versions once and use them as the cache key, so the cache is
       # invalidated exactly when "latest" (or "latest-beta") points to a new build.
       - name: Resolve Obsidian versions (cache key)
+        # Downloads the Obsidian version manifest; retried because transient ECONNRESETs were seen on runners.
         run: |
-          npx tsx wdio.conf.mts | grep 'obsidian-cache-key:' > obsidian-versions-lock.txt
+          for attempt in 1 2 3; do
+            if npx tsx wdio.conf.mts | grep 'obsidian-cache-key:' > obsidian-versions-lock.txt; then
+              break
+            fi
+            echo "attempt $attempt failed, retrying in 15s…"
+            rm -f obsidian-versions-lock.txt
+            sleep 15
+          done
+          [ -s obsidian-versions-lock.txt ] || { echo "could not resolve Obsidian versions"; exit 1; }
           cat obsidian-versions-lock.txt
           rm -rf .obsidian-cache
         env:
