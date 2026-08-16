@@ -78,9 +78,15 @@ describe("02 settings tab", function () {
 		for (const n of WRAPPER_ROWS) expect(await settingVisible(n)).toBe(true);
 		for (const n of NATIVE_ROWS) expect(await settingVisible(n)).toBe(false);
 		await browser.waitUntil(() => readPluginData().backend === "wrapper", { timeout: 5_000 });
-		// the executable status line is rendered (found or not, depending on the machine)
-		const desc = await (await settingRow("GPG executable")).$(".setting-item-description").getText();
-		expect(desc).toContain("Status:");
+		// The executable status line is rendered ASYNCHRONOUSLY: SettingsTab.checkGpgExecutable awaits
+		// `gpg --version` (isGPG) and only then rewrites the description. Wait for it — found or not,
+		// depending on the machine (spawning gpg takes hundreds of ms on the Windows runners).
+		const descEl = (await settingRow("GPG executable")).$(".setting-item-description");
+		await browser.waitUntil(async () => (await descEl.getText()).includes("Status:"), {
+			timeout: 15_000,
+			timeoutMsg: "no 'Status:' line under 'GPG executable' — checkGpgExecutable never resolved",
+		});
+		console.log(`    ${(await descEl.getText()).split("\n").find((l) => l.startsWith("Status:"))}`);
 	});
 
 	it("on emulated mobile the backend dropdown only offers OpenPGP.js and is disabled", async function () {
