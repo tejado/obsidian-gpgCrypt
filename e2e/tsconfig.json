@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noImplicitAny": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["node", "mocha", "@wdio/globals/types", "@wdio/mocha-framework", "wdio-obsidian-service"]
+  },
+  "include": ["./**/*.ts", "./**/*.mts", "../wdio.conf.mts"]
+}

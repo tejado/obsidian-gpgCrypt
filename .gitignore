@@ -24,3 +24,13 @@ data.json
 
 # Exclude build output directory
 dist/
+
+# Testing
+coverage/
+logs/
+.obsidian-cache/
+obsidian-versions-lock.txt
+e2e/vaults/*/.obsidian/workspace*.json
+e2e/vaults/*/.trash/
+# The global data.json rule above must not drop the committed e2e fixture preset
+!e2e/vaults/**/data.json

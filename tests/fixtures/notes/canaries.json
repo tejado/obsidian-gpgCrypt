@@ -1,0 +1,12 @@
+{
+	"mustBeEncrypted": [
+		"Encrypted.md",
+		"EncryptedPw.md",
+		"Encrypted.gpg"
+	],
+	"plaintextCanaries": [
+		"Hello secret world",
+		"CANARY_EDIT_1",
+		"CANARY_TYPED_2"
+	]
+}

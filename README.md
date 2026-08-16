@@ -92,6 +92,12 @@ gpg --decrypt --output - path/to/vault/note.md
 - Copy over `main.js` and `manifest.json` to your vault `VaultFolder/.obsidian/plugins/gpgCrypt/`.
 - Alternative: `npm run dev VaultFolder/.obsidian/plugins/gpgCrypt/` to start compilation in watch mode directly into your vault.
 
+## Development & testing
+
+- `npm test` — unit, component and integration tests (Vitest, seconds).
+- `npm run test:e2e` — the built plugin inside real Obsidian (`minAppVersion` and latest, desktop + emulated mobile) via wdio-obsidian-service.
+- `npm run lint`, `npm run typecheck`, `npm run typecheck:drift` (compile against the newest `obsidian` typings).
+
 ## Credits
 
 - [mnaoumov](https://github.com/mnaoumov) gave me the decisive hint about the Obsidian API.

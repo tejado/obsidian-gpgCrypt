@@ -1,0 +1,54 @@
+# Daily: if a new Obsidian version (public or early-access) has been published since the last run,
+# trigger the CI workflow so the e2e matrix ("latest", and "latest-beta" when Catalyst secrets exist)
+# runs against it — the earliest possible warning that a new Obsidian release breaks the plugin.
+#
+# Notes:
+#  - The version list comes from wdio-obsidian-service's obsidian-versions.json (refreshed every 8 h).
+#  - GitHub disables scheduled workflows after 60 days without repository activity; re-enable it under
+#    Actions if that happens.
+name: Check for new Obsidian version
+
+on:
+  schedule:
+    - cron: "42 13 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const url = "https://raw.githubusercontent.com/jesse-r-s-hines/wdio-obsidian-service/HEAD/obsidian-versions.json";
+            const versions = await fetch(url).then((r) => r.json());
+            const latest = versions.versions.at(-1);
+            const lastObsidianUpdate = new Date(versions.metadata.timestamp);
+            core.info(`Latest Obsidian in manifest: ${latest?.version} (beta=${latest?.isBeta}), manifest updated ${lastObsidianUpdate.toISOString()}`);
+
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: "check_for_new_obsidian.yaml",
+              status: "success",
+              per_page: 1,
+            });
+            const lastRun = runs.data.workflow_runs[0] ? new Date(runs.data.workflow_runs[0].created_at) : new Date(0);
+            core.info(`Last successful check: ${lastRun.toISOString()}`);
+
+            if (lastObsidianUpdate > lastRun) {
+              core.notice(`New Obsidian version detected (${latest?.version}) — dispatching ci.yml`);
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: "ci.yml",
+                ref: "main",
+                inputs: { obsidian_versions: "" },
+              });
+            } else {
+              core.info("No new Obsidian version since the last check.");
+            }

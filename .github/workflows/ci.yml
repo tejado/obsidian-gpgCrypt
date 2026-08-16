@@ -1,0 +1,200 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      obsidian_versions:
+        description: "Obsidian versions for e2e, space separated app/installer pairs (e.g. 'latest/latest 1.7.7/1.7.7 latest-beta/latest'). Empty = earliest + latest."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 22.x
+
+jobs:
+  # ---------------------------------------------------------------------------------------------
+  # Static checks: lint, typecheck (build typings), version consistency, production build
+  # ---------------------------------------------------------------------------------------------
+  static:
+    name: lint · typecheck · build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - name: Version consistency (package.json / manifest.json / versions.json)
+        # Reports F27 until the release metadata is fixed; make it blocking afterwards.
+        run: npm run check:versions
+        continue-on-error: true
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------------------------
+  # Typings drift (advisory): does src/ still compile against the NEWEST `obsidian` typings?
+  # ---------------------------------------------------------------------------------------------
+  typings-drift:
+    name: typings drift (obsidian@latest, advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck:drift
+
+  # ---------------------------------------------------------------------------------------------
+  # Unit / component / integration tests (Vitest) on all three OSes, incl. real-gpg wrapper tests
+  # ---------------------------------------------------------------------------------------------
+  test:
+    name: vitest (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash # Git Bash on Windows → Git-for-Windows' gpg.exe is on PATH
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+
+      - name: Prepare isolated GNUPGHOME with the TEST-ONLY fixture keys
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            export GNUPGHOME="C:/gnupg-ci"          # must stay < 80 chars on Windows
+          else
+            export GNUPGHOME="/tmp/gnupghome-ci"    # short: unix socket path limit (104 on macOS)
+          fi
+          echo "GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
+          mkdir -p "$GNUPGHOME"
+          [ "$RUNNER_OS" = "Windows" ] || chmod 700 "$GNUPGHOME"
+          printf 'batch\nno-tty\npinentry-mode loopback\ntrust-model always\n' > "$GNUPGHOME/gpg.conf"
+          printf 'allow-loopback-pinentry\n' > "$GNUPGHOME/gpg-agent.conf"
+          gpg --version | head -1
+          gpg --batch --import tests/fixtures/keys/nopass.private.asc
+          gpg --batch --pinentry-mode loopback --passphrase test --import tests/fixtures/keys/pw.private.asc
+          gpg --list-secret-keys --with-colons | grep -c '^sec' 
+          echo "GPG_INTEGRATION=1" >> "$GITHUB_ENV"
+          echo "GPG_BIN=gpg" >> "$GITHUB_ENV"
+
+      - name: Unit / component / integration tests (with coverage)
+        run: npm run test:coverage
+
+      - name: Stop gpg-agent
+        if: always()
+        run: gpgconf --kill all || true
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------------------------
+  # End-to-end in REAL Obsidian (wdio-obsidian-service): earliest (minAppVersion) + latest,
+  # desktop + emulated mobile, on all three OSes. Adds latest-beta when Catalyst secrets exist.
+  # ---------------------------------------------------------------------------------------------
+  e2e:
+    name: e2e obsidian (${{ matrix.os }})
+    needs: [static]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      OBSIDIAN_VERSIONS: ${{ inputs.obsidian_versions }}
+      OBSIDIAN_EMAIL: ${{ secrets.OBSIDIAN_EMAIL }}
+      OBSIDIAN_PASSWORD: ${{ secrets.OBSIDIAN_PASSWORD }}
+      WDIO_MAX_INSTANCES: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      # Resolve the concrete Obsidian versions once and use them as the cache key, so the cache is
+      # invalidated exactly when "latest" (or "latest-beta") points to a new build.
+      - name: Resolve Obsidian versions (cache key)
+        run: |
+          npx tsx wdio.conf.mts | grep 'obsidian-cache-key:' > obsidian-versions-lock.txt
+          cat obsidian-versions-lock.txt
+          rm -rf .obsidian-cache
+        env:
+          CI: "true"
+      - uses: actions/cache@v4
+        with:
+          path: .obsidian-cache
+          key: obsidian-cache-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('obsidian-versions-lock.txt') }}
+
+      - name: Virtual display (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -q -y xvfb herbstluftwm dzen2 x11-xserver-utils libgtk-3-0 libnss3 libasound2t64
+          export DISPLAY=:99
+          echo "DISPLAY=$DISPLAY" >> "$GITHUB_ENV"
+          Xvfb $DISPLAY -screen 0 1280x1024x24 +extension GLX -noreset &
+          sleep 1
+          herbstluftwm &
+          sleep 1
+
+      - name: Run e2e tests
+        run: npx wdio run ./wdio.conf.mts
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-logs-${{ matrix.os }}
+          path: logs/
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------------------------
+  # Single required status check for branch protection
+  # ---------------------------------------------------------------------------------------------
+  check:
+    name: all green
+    if: always()
+    needs: [static, test, e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: re-actors/alls-green@release/v1
+        with:
+          jobs: ${{ toJSON(needs) }}
