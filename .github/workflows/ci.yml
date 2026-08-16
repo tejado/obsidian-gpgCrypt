@@ -91,6 +91,10 @@ jobs:
             # Git for Windows' gpg is an MSYS build: it needs the POSIX spelling (C:/… is taken as a
             # RELATIVE path → "no writable keyring found"); keep it short (< 80 chars, gpg-agent limit)
             export GNUPGHOME="/c/gnupg-ci"
+            # When bash execs a NATIVE program (node.exe) the MSYS runtime rewrites POSIX-looking env
+            # values (/c/gnupg-ci → C:/gnupg-ci), and the MSYS gpg that node then spawns takes that as
+            # relative again. Exclude GNUPGHOME from that conversion so node passes it through verbatim.
+            echo "MSYS2_ENV_CONV_EXCL=GNUPGHOME" >> "$GITHUB_ENV"
           else
             export GNUPGHOME="/tmp/gnupghome-ci"    # short: unix socket path limit (104 on macOS)
           fi
@@ -107,7 +111,10 @@ jobs:
           echo "GPG_BIN=gpg" >> "$GITHUB_ENV"
 
       - name: Unit / component / integration tests (with coverage)
-        run: npm run test:coverage
+        run: |
+          # what the gpg spawned from the tests will see (must be the POSIX spelling on Windows)
+          node -p '"GNUPGHOME as seen by node: " + process.env.GNUPGHOME'
+          npm run test:coverage
 
       - name: Stop gpg-agent
         if: always()

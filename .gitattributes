@@ -1,0 +1,4 @@
+# Check every text file out with LF on all platforms (overrides core.autocrlf, which is "true" by
+# default on Git for Windows and would otherwise rewrite the test fixtures / e2e vault to CRLF —
+# the tests then compare CRLF plaintext against LF ciphertext content).
+* text=auto eol=lf
