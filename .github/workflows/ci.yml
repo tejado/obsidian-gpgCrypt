@@ -29,8 +29,8 @@ jobs:
     name: lint · typecheck · build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -42,7 +42,7 @@ jobs:
         run: npm run check:versions
         continue-on-error: true
       - run: npm run build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
@@ -56,8 +56,8 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -78,8 +78,8 @@ jobs:
       run:
         shell: bash # Git Bash on Windows → Git-for-Windows' gpg.exe is on PATH
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -87,28 +87,8 @@ jobs:
 
       - name: Prepare isolated GNUPGHOME with the TEST-ONLY fixture keys
         run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            # Git for Windows' gpg is an MSYS build: it needs the POSIX spelling (C:/… is taken as a
-            # RELATIVE path → "no writable keyring found"); keep it short (< 80 chars, gpg-agent limit)
-            export GNUPGHOME="/c/gnupg-ci"
-            # When bash execs a NATIVE program (node.exe) the MSYS runtime rewrites POSIX-looking env
-            # values (/c/gnupg-ci → C:/gnupg-ci), and the MSYS gpg that node then spawns takes that as
-            # relative again. Exclude GNUPGHOME from that conversion so node passes it through verbatim.
-            echo "MSYS2_ENV_CONV_EXCL=GNUPGHOME" >> "$GITHUB_ENV"
-          else
-            export GNUPGHOME="/tmp/gnupghome-ci"    # short: unix socket path limit (104 on macOS)
-          fi
-          echo "GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
-          mkdir -p "$GNUPGHOME"
-          [ "$RUNNER_OS" = "Windows" ] || chmod 700 "$GNUPGHOME"
-          printf 'batch\nno-tty\npinentry-mode loopback\ntrust-model always\n' > "$GNUPGHOME/gpg.conf"
-          printf 'allow-loopback-pinentry\n' > "$GNUPGHOME/gpg-agent.conf"
-          gpg --version | head -1
-          gpg --batch --import tests/fixtures/keys/nopass.private.asc
-          gpg --batch --pinentry-mode loopback --passphrase test --import tests/fixtures/keys/pw.private.asc
-          gpg --list-secret-keys --with-colons | grep -c '^sec' 
-          echo "GPG_INTEGRATION=1" >> "$GITHUB_ENV"
-          echo "GPG_BIN=gpg" >> "$GITHUB_ENV"
+          bash scripts/ci-setup-gnupghome.sh
+          echo "GPG_INTEGRATION=1" >> "$GITHUB_ENV"   # gates tests/unit/backend/wrapper/BackendWrapper.gpg.test.ts
 
       - name: Unit / component / integration tests (with coverage)
         run: |
@@ -120,7 +100,7 @@ jobs:
         if: always()
         run: gpgconf --kill all || true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: matrix.os == 'ubuntu-latest'
         with:
           name: coverage
@@ -148,13 +128,13 @@ jobs:
       OBSIDIAN_PASSWORD: ${{ secrets.OBSIDIAN_PASSWORD }}
       WDIO_MAX_INSTANCES: 2
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist
@@ -177,7 +157,7 @@ jobs:
           rm -rf .obsidian-cache
         env:
           CI: "true"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .obsidian-cache
           key: obsidian-cache-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('obsidian-versions-lock.txt') }}
@@ -194,10 +174,22 @@ jobs:
           herbstluftwm &
           sleep 1
 
+      # The GnuPG CLI wrapper backend is only exercised in real Obsidian when a gpg binary and an
+      # isolated GNUPGHOME with the fixture keys are present; the Obsidian process inherits both from
+      # the runner. Without this, e2e/specs/11-wrapper-backend.e2e.ts silently skips itself.
+      - name: Prepare isolated GNUPGHOME with the TEST-ONLY fixture keys
+        run: |
+          bash scripts/ci-setup-gnupghome.sh
+          echo "E2E_GPG=1" >> "$GITHUB_ENV"          # gates e2e/specs/11-wrapper-backend.e2e.ts
+
       - name: Run e2e tests
         run: npx wdio run ./wdio.conf.mts
 
-      - uses: actions/upload-artifact@v4
+      - name: Stop gpg-agent
+        if: always()
+        run: gpgconf --kill all || true
+
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: e2e-logs-${{ matrix.os }}

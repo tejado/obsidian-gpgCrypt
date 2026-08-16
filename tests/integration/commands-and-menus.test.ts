@@ -3,7 +3,7 @@
  * `persistentFileDecrypt` (main.ts:810-881), the file/folder context menu handlers (main.ts:189-246)
  * and `encryptAllFilesInPath` (main.ts:796-808).
  */
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { Menu, Modal, Notice, TAbstractFile } from "obsidian";
 import { createPluginHarness, flush, waitFor, type Harness } from "../helpers/plugin-harness";
 import { CIPHERTEXT_NOPASS, PLAINTEXT, isArmoredMessage } from "../helpers/fixtures";
@@ -263,6 +263,21 @@ describe("folder context menu + encryptAllFilesInPath", () => {
 	test("default settings: no folder item at all", async () => {
 		h = await createPluginHarness({ files: FILES });
 		expect(fileMenu(h.app.vault.getFolderByPath("secret")!).titles__()).toEqual([]);
+	});
+
+	// F40: `FolderInSettingValidator` throwing *is* the "not in an encrypted folder" signal, and the catch at
+	// main.ts:205-207 logs the ValidationError (with its stack) via a bare console.log — not DEBUG-gated, so
+	// it fires in release builds too. With default settings foldersToEncrypt is empty, i.e. on every
+	// right-click. Documents the noise; the stdout of this very file is full of it.
+	test.fails("[F40] opening the folder menu outside foldersToEncrypt logs nothing to the console", async () => {
+		h = await createPluginHarness({ files: FILES, settings: { foldersToEncrypt: ["secret"] } });
+		const log = vi.spyOn(console, "log").mockImplementation(() => {});
+		try {
+			fileMenu(h.app.vault.getFolderByPath("other")!);
+			expect(log).not.toHaveBeenCalled();
+		} finally {
+			log.mockRestore();
+		}
 	});
 
 	test("clicking 'Encrypt entire folder' encrypts every note below the folder (recursively), nothing outside", async () => {
